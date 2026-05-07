@@ -7,10 +7,10 @@ function Header() {
             <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-5 lg:px-6">
                 <div>
                     <p className="text-xs uppercase tracking-[0.2em] text-zinc-400">
-                        Appname
+                        IT-U Evaluation Project
                     </p>
                     <h1 className="text-xl font-semibold text-zinc-100">
-                        Prestashop Tier App
+                        Prestashop React Tier App
                     </h1>
                 </div>
                 <div className="flex flex-row gap-6">

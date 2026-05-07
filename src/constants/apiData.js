@@ -163,12 +163,12 @@ export const API_URLS = [
     //   ref: "customer_threads",
     //   description: "Customer services threads",
     // },
-    // {
-    //   name: "Customers",
-    //   baseUrl: "/customers",
-    //   ref: "customers",
-    //   description: "The e-shop's customers",
-    // },
+    {
+      name: "Customers",
+      baseUrl: "/customers",
+      ref: "customers",
+      description: "The e-shop's customers",
+    },
     // {
     //   name: "Customizations",
     //   baseUrl: "/customizations",

@@ -69,8 +69,34 @@ function ResetDatabase() {
     const summary = summarizeReport(lastReport);
 
     return (
+
         <div className="p-4">
+
             <h2 className="text-2xl font-bold mb-4">Reset Database Page</h2>
+            {summary && (
+                <div className="rounded border border-gray-200 bg-white p-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Resume</h3>
+                    <p className="mt-2 text-sm text-gray-700">
+                        {summary.totalDeleted} elements supprimes sur {summary.totalIds} a
+                        travers {summary.totalResources} ressources.
+                    </p>
+                    <div className="mt-3 space-y-2 text-sm text-gray-700">
+                        {lastReport.map((item) => (
+                            <div key={item.ref} className="flex flex-wrap items-center gap-2">
+                                <span className="font-semibold text-gray-900">{item.ref}</span>
+                                {item.listError ? (
+                                    <span className="text-red-600">Liste impossible: {item.listError.message}</span>
+                                ) : (
+                                    <span>
+                                        {item.deleted.length} supprimes / {item.ids.length} total
+                                        {item.errors.length > 0 ? ` — ${item.errors.length} erreurs` : ""}
+                                    </span>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
             <form onSubmit={handleDeleteSubmit} className="mb-4">
                 <button
                     type="submit"
@@ -114,29 +140,7 @@ function ResetDatabase() {
                     </tbody>
                 </table>
             </form>
-            {summary && (
-                <div className="rounded border border-gray-200 bg-white p-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Resume</h3>
-                    <p className="mt-2 text-sm text-gray-700">
-                        {summary.totalDeleted} elements supprimes sur {summary.totalIds} a travers {summary.totalResources} ressources.
-                    </p>
-                    <div className="mt-3 space-y-2 text-sm text-gray-700">
-                        {lastReport.map((item) => (
-                            <div key={item.ref} className="flex flex-wrap items-center gap-2">
-                                <span className="font-semibold text-gray-900">{item.ref}</span>
-                                {item.listError ? (
-                                    <span className="text-red-600">Liste impossible: {item.listError.message}</span>
-                                ) : (
-                                    <span>
-                                        {item.deleted.length} supprimes / {item.ids.length} total
-                                        {item.errors.length > 0 ? ` — ${item.errors.length} erreurs` : ""}
-                                    </span>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+
         </div>
     );
 }

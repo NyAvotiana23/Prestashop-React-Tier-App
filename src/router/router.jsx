@@ -5,6 +5,7 @@ import {catalogRoutes} from "./catalogue-router";
 import ResetDatabase from "../pages/ResetDatabase.jsx";
 import {commandeRoutes} from "./commande-router.jsx";
 import ImportDatabase from "../pages/ImportDatabase.jsx";
+import {customerRoutes} from "./customer-router.jsx";
 
 export const router = createBrowserRouter([
     {
@@ -16,6 +17,7 @@ export const router = createBrowserRouter([
             {path: "/import-database", element: <ImportDatabase/>},
 
             catalogRoutes,
+            customerRoutes,
             commandeRoutes
         ],
     },
