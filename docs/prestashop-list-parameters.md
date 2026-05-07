@@ -1,6 +1,6 @@
 # PrestaShop Webservice List Parameters
 
-Use these parameters to get more detailed lists, filter results, and apply sorting/pagination.
+Use these parameters to get more detailed lists, filter results, and apply sorting/pagination. The app helpers (`getList`) map these options to query params.
 
 ## Display parameter
 
@@ -24,8 +24,8 @@ Examples:
 Filter results using the `filter` parameter.
 
 | Key             | Value    | Result                                                            |
-| --------------- | -------- | ----------------------------------------------------------------- | ------------------------------------ |
-| `filter[field]` | `[1      | 5]`                                                               | OR operator: list of possible values |
+| --------------- | -------- | ----------------------------------------------------------------- |
+| `filter[field]` | `[1|5]`  | OR operator: list of possible values                              |
 | `filter[field]` | `[1,10]` | Interval operator: define interval of possible values             |
 | `filter[field]` | `[John]` | Literal value (not case sensitive)                                |
 | `filter[field]` | `[Jo]%`  | Begin operator: fields begins with the value (not case sensitive) |
@@ -35,8 +35,8 @@ Filter results using the `filter` parameter.
 Examples:
 
 | Result                                               | API call                                   | PHP Webservice lib options                                             |
-| ---------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------- | ------------------------------------------------------- | ------ |
-| Only the customers whose ids are 1 or 5              | `/api/customers/?filter[id]=[1             | 5]`                                                                    | `$opt = ['resource' => 'customers', 'filter[id]' => '[1 | 5]'];` |
+| ---------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------- |
+| Only the customers whose ids are 1 or 5              | `/api/customers/?filter[id]=[1|5]`         | `$opt = ['resource' => 'customers', 'filter[id]' => '[1|5]'];`         |
 | Only the customers whose ids are between 1 and 10    | `/api/customers/?filter[id]=[1,10]`        | `$opt = ['resource' => 'customers', 'filter[id]' => '[1,10]'];`        |
 | Only the customers whose first name is "John"        | `/api/customers/?filter[firstname]=[John]` | `$opt = ['resource' => 'customers', 'filter[firstname]' => '[John]'];` |
 | Only the manufacturers whose name begins with "Appl" | `/api/manufacturers/?filter[name]=[appl]%` | `$opt = ['resource' => 'manufacturers', 'filter[name]' => '[appl]%'];` |
@@ -45,9 +45,9 @@ Examples:
 
 Sort results using the `sort` parameter.
 
-| Key    | Value               | Result  |
-| ------ | ------------------- | ------- | ---------------------------------------------------------------------------------- |
-| `sort` | `[{fieldname}\_{ASC | DESC}]` | The sort value is composed of a field name and the expected order separated by `_` |
+| Key    | Value                   | Result                                                                              |
+| ------ | ----------------------- | ----------------------------------------------------------------------------------- |
+| `sort` | `[{field}_{ASC|DESC}]`   | The sort value is composed of a field name and the expected order separated by `_` |
 
 Examples:
 
@@ -74,3 +74,10 @@ Examples:
 | -------------------------------------------------------------- | ------------------------ | ---------------------------------------------------- |
 | Only include the first 5 states                                | `/api/states/?limit=5`   | `$opt = ['resource' => 'states', 'limit' => '5'];`   |
 | Only include the first 5 states starting from the 10th element | `/api/states/?limit=9,5` | `$opt = ['resource' => 'states', 'limit' => '9,5'];` |
+
+## App helper mapping
+
+In `src/api/prestashopCrud.js`, list options map as follows:
+
+- `display`, `sort`, `limit`, `date` are passed through directly.
+- `filters` is mapped to `filter[field]=value` entries.

@@ -4,7 +4,7 @@ This document describes the Products resource. The same request patterns apply t
 
 ## Base variables
 
-- `{{webservice_url}}` = PrestaShop host (example: `localhost/prestshop`)
+- `{{webservice_url}}` = PrestaShop host (example: `http://localhost/prestashop`)
 - `{{webservice_key}}` = PrestaShop Webservice key
 - `{{product_id}}` = Product ID
 

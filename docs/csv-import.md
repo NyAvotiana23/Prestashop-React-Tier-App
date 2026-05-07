@@ -8,10 +8,15 @@ This document describes how CSV files are parsed and transformed before being se
 - Headers: `src/csv/csvHeaders.js`
 - Mapping: `src/csv/csvProductMapping.js`
 - Import runner: `src/csv/csvImporter.js`
+- UI: `src/pages/ImportDatabase.jsx`, `src/csv/CsvUploader.jsx`, `src/csv/CsvTemplateHolder.jsx`
 
 ## 2) Products CSV header
 
 The template header matches `csv_import/products_import.csv` and is exposed in the UI download button for Products.
+
+Notes:
+- Headers are currently validated but not blocking; missing headers are reported in the result summary.
+- The template download uses the delimiter selected per resource.
 
 ## 3) Product mapping (CSV -> XML fields)
 
@@ -72,18 +77,32 @@ Auto defaults:
 Not mapped yet (kept for future):
 - Images, tags, feature values, accessories, advanced stock fields.
 
-## 4) Import flow
+## 4) Import flow (UI)
 
-1. Upload CSV in the Import page.
-2. The parser validates headers.
-3. Each row is transformed to a JSON payload.
-4. `createResource("products", payload)` sends the XML to PrestaShop.
+1. Go to `/import-database`.
+2. Select delimiter and decimal separator for each resource row.
+3. Download a CSV template (uses the chosen delimiter) if needed.
+4. Upload the CSV file for a resource.
+5. Click "Import CSV" to create resources one by one.
+6. The UI shows per-resource progress, created count, and errors.
 
-## 5) Demo (local)
+Preview:
+- The "Charger donnees" button fetches a sample list (`limit: 0,5`) for each checked resource.
+
+## 5) Import flow (code)
+
+1. CSV is parsed with PapaParse (headers + rows).
+2. Each row is mapped to a PrestaShop JSON payload.
+3. `createResource(ref, payload)` sends XML to PrestaShop.
+4. Progress callbacks are emitted per row.
+
+Decimal handling:
+- Numeric fields are normalized using the selected decimal separator.
+
+## 6) Demo (local)
 
 The demo parses the first row and prints the payload:
 
 ```bash
 npm run csv:demo
 ```
-

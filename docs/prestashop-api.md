@@ -7,9 +7,14 @@ This project uses a small, generic axios client for the Prestashop Webservice AP
 Vite only exposes variables that start with `VITE_`, so the client reads:
 
 ```
-VITE_PRESTASHOP_API_URL=http://localhost/prestashop/api/
+VITE_PRESTASHOP_API_URL=/api
 VITE_PRESTASHOP_API_KEY=YOUR_KEY_HERE
 ```
+
+Notes:
+- `VITE_PRESTASHOP_API_URL` is used as the axios `baseURL`.
+- In dev, `/api` is proxied to `/prestashop/api` by `vite.config.js`.
+- `VITE_PRESTASHOP_API_BASE_URL` exists in `.env` but is not used by the current client code.
 
 Important: because this is a frontend app, the API key will be visible to anyone who can load the app in a browser. Use a safe key and restrict its permissions on the Prestashop side.
 
@@ -17,8 +22,8 @@ Important: because this is a frontend app, the API key will be visible to anyone
 
 The client is implemented here:
 
-- src/api/prestashopApi.js
-- src/api/prestashopCrud.js
+- `src/api/prestashopApi.js`
+- `src/api/prestashopCrud.js`
 
 It creates a single axios instance with:
 
@@ -27,7 +32,7 @@ It creates a single axios instance with:
 - `Accept: application/xml`
 - `responseType: "text"` (XML is returned as raw text, then parsed to JSON)
 
-The CRUD helpers in `src/api/prestashopCrud.js` wrap list/detail requests, CRUD calls, and simple list filtering.
+The CRUD helpers in `src/api/prestashopCrud.js` wrap list/detail requests, CRUD calls, list filtering, and database reset helpers.
 
 ## 3) Generic request helper
 
@@ -70,6 +75,7 @@ Notes:
   (for example `@_id` becomes `id`). If a node only contains `#text`, it is
   collapsed into a plain string value.
 - Raw XML is still available in `response.rawXml` when needed.
+- Payloads can be either `{ product: { ... } }` or `{ prestashop: { product: { ... } } }`.
 
 ## 4) CRUD helpers (recommended in the app)
 
@@ -81,6 +87,7 @@ import {
   updateResource,
   deleteResource,
   getAllIds,
+  resetDatabase,
 } from "../api/prestashopCrud";
 
 const products = await getList("products", {
@@ -97,6 +104,8 @@ await updateResource("products", 1, {
 
 const ids = await getAllIds("products");
 await deleteResource("products", ids[0]);
+
+const report = await resetDatabase(["products", "orders"]);
 ```
 
 ## 5) Notes and troubleshooting

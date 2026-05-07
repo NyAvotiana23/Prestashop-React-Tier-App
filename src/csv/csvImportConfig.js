@@ -1,5 +1,5 @@
 import { PRODUCTS_CSV_HEADERS } from "./csvHeaders.js";
-import { mapProductRowToPayload } from "./csvProductMapping.js";
+import { mapProductRowToPayload } from "./mappings/csvProductMapping.js";
 
 export const CSV_IMPORT_CONFIGS = {
   products: {

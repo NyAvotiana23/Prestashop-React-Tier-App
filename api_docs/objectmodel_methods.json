@@ -1,0 +1,386 @@
+{
+  "Access.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Address.php": {
+    "delete": "public function delete()\n    {\n        if (Validate::isUnsignedId($this->id_customer)) {\n            Customer::resetAddressCache($this->id_customer, $this->id);\n        }\n\n        /*\n         * Deleting an address can go two ways.\n         *\n         * 1) If the address is used in an order, we will only soft-delete it. This means mark it with a flag,\n         *    hide it everywhere and prevent anyone using it. We must absolutely retain all the business data\n         *    for the order.\n         * 2) If it's not used, we can safely delete the address.\n         */\n\n        // First step is to unlink this address from all NON-ORDERED carts.\n        $this->deleteCartAddress();\n\n        // Second step - check if the address has been used in some order.\n        if (!$this->isUsed()) {\n            // If NO, we can safely delete it.\n            if (isset(static::$addressExists[$this->id])) {\n                static::$addressExists[$this->id] = false;\n            }\n\n            return parent::delete();\n        } else {\n            // If YES, we only soft delete it and keep it in the database.\n            return $this->softDelete();\n        }\n    }",
+    "add": "public function add($autodate = true, $null_values = false)\n    {\n        if (!parent::add($autodate, $null_values)) {\n            return false;\n        }\n\n        if (Validate::isUnsignedId($this->id_customer)) {\n            Customer::resetAddressCache($this->id_customer, $this->id);\n        }\n\n        // Update the cache\n        static::$addressExists[$this->id] = true;\n\n        return true;\n    }",
+    "update": "public function update($null_values = false)\n    {\n        // Empty related caches\n        if (isset(self::$_idCountries[$this->id])) {\n            unset(self::$_idCountries[$this->id]);\n        }\n        if (isset(self::$_idZones[$this->id])) {\n            unset(self::$_idZones[$this->id]);\n        }\n\n        // Update the cache\n        static::$addressExists[$this->id] = true;\n\n        if (Validate::isUnsignedId($this->id_customer)) {\n            Customer::resetAddressCache($this->id_customer, $this->id);\n        }\n\n        /* Skip the required fields */\n        if ($this->isUsed()) {\n            self::$fieldsRequiredDatabase['Address'] = [];\n        }\n\n        return parent::update($null_values);\n    }",
+    "save": null
+  },
+  "AddressFormat.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Alias.php": {
+    "delete": "public function delete()\n    {\n        if (parent::delete()) {\n            // Refresh cache of feature detachable\n            Configuration::updateGlobalValue('PS_ALIAS_FEATURE_ACTIVE', Alias::isCurrentlyUsed($this->def['table'], true));\n\n            return true;\n        }\n\n        return false;\n    }",
+    "add": "public function add($autoDate = true, $nullValues = false)\n    {\n        $this->alias = Tools::replaceAccentedChars($this->alias);\n        $this->search = Tools::replaceAccentedChars($this->search);\n\n        if (parent::add($autoDate, $nullValues)) {\n            // Set cache of feature detachable to true\n            Configuration::updateGlobalValue('PS_ALIAS_FEATURE_ACTIVE', '1');\n\n            return true;\n        }\n\n        return false;\n    }",
+    "update": null,
+    "save": null
+  },
+  "Attachment.php": {
+    "delete": "public function delete()\n    {\n        if (file_exists(_PS_DOWNLOAD_DIR_ . $this->file)) {\n            @unlink(_PS_DOWNLOAD_DIR_ . basename($this->file));\n        }\n\n        $sql = new DbQuery();\n        $sql->select('pa.`id_product`');\n        $sql->from('product_attachment', 'pa');\n        $sql->where('pa.`id_attachment` = ' . (int) $this->id);\n        $products = Db::getInstance()->executeS($sql);\n\n        Db::getInstance()->delete(\n            'product_attachment',\n            '`id_attachment` = ' . (int) $this->id\n        );\n\n        foreach ($products as $product) {\n            Product::updateCacheAttachment((int) $product['id_product']);\n        }\n\n        return parent::delete();\n    }",
+    "add": "public function add($autoDate = true, $nullValues = false)\n    {\n        if (file_exists(_PS_DOWNLOAD_DIR_ . $this->file)) {\n            $this->file_size = filesize(_PS_DOWNLOAD_DIR_ . $this->file);\n        }\n\n        return parent::add($autoDate, $nullValues);\n    }",
+    "update": "public function update($nullValues = false)\n    {\n        if (file_exists(_PS_DOWNLOAD_DIR_ . $this->file)) {\n            $this->file_size = filesize(_PS_DOWNLOAD_DIR_ . $this->file);\n        }\n\n        return parent::update($nullValues);\n    }",
+    "save": null
+  },
+  "AttributeGroup.php": {
+    "delete": "public function delete()\n    {\n        if (!$this->hasMultishopEntries() || Shop::getContext() == Shop::CONTEXT_ALL) {\n            /* Select children in order to find linked combinations */\n            $attributeIds = Db::getInstance()->executeS(\n                '\n\t\t\t\tSELECT `id_attribute`\n\t\t\t\tFROM `' . _DB_PREFIX_ . 'attribute`\n\t\t\t\tWHERE `id_attribute_group` = ' . (int) $this->id\n            );\n            if ($attributeIds === false) {\n                return false;\n            }\n            /* Removing attributes to the found combinations */\n            $toRemove = [];\n            foreach ($attributeIds as $attribute) {\n                $toRemove[] = (int) $attribute['id_attribute'];\n            }\n            if (!empty($toRemove) && Db::getInstance()->execute('\n\t\t\t\tDELETE FROM `' . _DB_PREFIX_ . 'product_attribute_combination`\n\t\t\t\tWHERE `id_attribute`\n\t\t\t\t\tIN (' . implode(', ', $toRemove) . ')') === false) {\n                return false;\n            }\n            /* Remove combinations if they do not possess attributes anymore */\n            if (!AttributeGroup::cleanDeadCombinations()) {\n                return false;\n            }\n            /* Also delete related attributes */\n            if (count($toRemove)) {\n                if (!Db::getInstance()->execute('\n\t\t\t\tDELETE FROM `' . _DB_PREFIX_ . 'attribute_lang`\n\t\t\t\tWHERE `id_attribute`\tIN (' . implode(',', $toRemove) . ')') ||\n                !Db::getInstance()->execute('\n\t\t\t\tDELETE FROM `' . _DB_PREFIX_ . 'attribute_shop`\n\t\t\t\tWHERE `id_attribute`\tIN (' . implode(',', $toRemove) . ')') ||\n                !Db::getInstance()->execute('DELETE FROM `' . _DB_PREFIX_ . 'attribute` WHERE `id_attribute_group` = ' . (int) $this->id)) {\n                    return false;\n                }\n            }\n            $this->cleanPositions();\n        }\n        $return = parent::delete();\n        if ($return) {\n            Hook::exec('actionAttributeGroupDelete', ['id_attribute_group' => $this->id]);\n        }\n\n        return $return;\n    }",
+    "add": "public function add($autoDate = true, $nullValues = false)\n    {\n        $this->is_color_group = $this->group_type == 'color';\n\n        if ($this->position <= 0) {\n            $this->position = AttributeGroup::getHigherPosition() + 1;\n        }\n\n        $return = parent::add($autoDate, true);\n        Hook::exec('actionAttributeGroupSave', ['id_attribute_group' => $this->id]);\n\n        return $return;\n    }",
+    "update": "public function update($nullValues = false)\n    {\n        $this->is_color_group = $this->group_type == 'color';\n\n        $return = parent::update($nullValues);\n        Hook::exec('actionAttributeGroupSave', ['id_attribute_group' => $this->id]);\n\n        return $return;\n    }",
+    "save": null
+  },
+  "Carrier.php": {
+    "delete": "public function delete()\n    {\n        if ($this->isUsed()) {\n            return parent::softDelete() && Carrier::cleanPositions();\n        } else {\n            if (!parent::delete()) {\n                return false;\n            }\n\n            Carrier::cleanPositions();\n\n            return Db::getInstance()->delete('cart_rule_carrier', 'id_carrier = ' . (int) $this->id) &&\n                    Db::getInstance()->delete('module_carrier', 'id_reference = ' . (int) $this->id_reference) &&\n                    $this->deleteTaxRulesGroup(Shop::getShops(true, null, true));\n        }\n    }",
+    "add": "public function add($autoDate = true, $nullValues = false)\n    {\n        if ($this->position <= 0) {\n            $this->position = Carrier::getHigherPosition() + 1;\n        }\n        if (!parent::add($autoDate, $nullValues) || !Validate::isLoadedObject($this)) {\n            return false;\n        }\n        if (!$count = Db::getInstance()->getValue('SELECT count(`id_carrier`) FROM `' . _DB_PREFIX_ . $this->def['table'] . '` WHERE `deleted` = 0')) {\n            return false;\n        }\n        if ($count == 1) {\n            Configuration::updateValue('PS_CARRIER_DEFAULT', (int) $this->id);\n        }\n\n        // Register reference\n        Db::getInstance()->execute(\n            'UPDATE `' . _DB_PREFIX_ . $this->def['table'] . '` SET `id_reference` = ' .\n            (int) $this->id . ' WHERE `id_carrier` = ' . (int) $this->id\n        );\n\n        foreach (Shop::getContextListShopID() as $shopId) {\n            foreach (Module::getPaymentModules() as $module) {\n                Db::getInstance()->execute(\n                    '\n                    INSERT INTO `' . _DB_PREFIX_ . 'module_' . bqSQL('carrier') . '`\n                    (`id_module`, `id_shop`, `id_' . bqSQL('reference') . '`)\n                    VALUES (' . (int) $module['id_module'] . ',' . (int) $shopId . ',' . (int) $this->id . ')'\n                );\n            }\n        }\n\n        return true;\n    }",
+    "update": null,
+    "save": null
+  },
+  "Cart.php": {
+    "delete": "public function delete()\n    {\n        if ($this->orderExists()) { //NOT delete a cart which is associated with an order\n            return false;\n        }\n\n        $uploaded_files = Db::getInstance()->executeS(\n            'SELECT cd.`value`\n            FROM `' . _DB_PREFIX_ . 'customized_data` cd\n            INNER JOIN `' . _DB_PREFIX_ . 'customization` c ON (cd.`id_customization`= c.`id_customization`)\n            WHERE cd.`type`= ' . (int) Product::CUSTOMIZE_FILE . ' AND c.`id_cart`=' . (int) $this->id\n        );\n\n        foreach ($uploaded_files as $must_unlink) {\n            unlink(_PS_UPLOAD_DIR_ . $must_unlink['value'] . '_small');\n            unlink(_PS_UPLOAD_DIR_ . $must_unlink['value']);\n        }\n\n        Db::getInstance()->execute(\n            'DELETE FROM `' . _DB_PREFIX_ . 'customized_data`\n            WHERE `id_customization` IN (\n                SELECT `id_customization`\n                FROM `' . _DB_PREFIX_ . 'customization`\n                WHERE `id_cart`=' . (int) $this->id . '\n            )'\n        );\n\n        Db::getInstance()->execute(\n            'DELETE FROM `' . _DB_PREFIX_ . 'customization`\n            WHERE `id_cart` = ' . (int) $this->id\n        );\n\n        if (!Db::getInstance()->execute('DELETE FROM `' . _DB_PREFIX_ . 'cart_cart_rule` WHERE `id_cart` = ' . (int) $this->id)\n            || !Db::getInstance()->execute('DELETE FROM `' . _DB_PREFIX_ . 'cart_product` WHERE `id_cart` = ' . (int) $this->id)) {\n            return false;\n        }\n\n        return parent::delete();\n    }",
+    "add": "public function add($autoDate = true, $nullValues = false)\n    {\n        if (!$this->id_lang) {\n            $this->id_lang = (int) Configuration::get('PS_LANG_DEFAULT');\n        }\n        if (!$this->id_shop) {\n            $this->id_shop = Context::getContext()->shop->id;\n        }\n        if (!$this->id_shop_group) {\n            $this->id_shop_group = Context::getContext()->shop->id_shop_group;\n        }\n\n        $return = parent::add($autoDate, $nullValues);\n        Hook::exec('actionCartSave', ['cart' => $this]);\n\n        return $return;\n    }",
+    "update": "public function update($nullValues = false)\n    {\n        if (isset(self::$_nbProducts[$this->id])) {\n            unset(self::$_nbProducts[$this->id]);\n        }\n\n        if (isset(self::$_totalWeight[$this->id])) {\n            unset(self::$_totalWeight[$this->id]);\n        }\n\n        $this->_products = null;\n        $return = parent::update($nullValues);\n        Hook::exec('actionCartSave', ['cart' => $this]);\n\n        return $return;\n    }",
+    "save": null
+  },
+  "CartRule.php": {
+    "delete": "public function delete()\n    {\n        if (!parent::delete()) {\n            return false;\n        }\n\n        Configuration::updateGlobalValue(\n            'PS_CART_RULE_FEATURE_ACTIVE',\n            CartRule::isCurrentlyUsed($this->def['table'], true)\n        );\n\n        $r = Db::getInstance()->delete('cart_cart_rule', '`id_cart_rule` = ' . (int) $this->id);\n        $r &= Db::getInstance()->delete('cart_rule_carrier', '`id_cart_rule` = ' . (int) $this->id);\n        $r &= Db::getInstance()->delete('cart_rule_shop', '`id_cart_rule` = ' . (int) $this->id);\n        $r &= Db::getInstance()->delete('cart_rule_group', '`id_cart_rule` = ' . (int) $this->id);\n        $r &= Db::getInstance()->delete('cart_rule_country', '`id_cart_rule` = ' . (int) $this->id);\n        $r &= Db::getInstance()->delete('cart_rule_combination', '`id_cart_rule_1` = ' . (int) $this->id . ' OR `id_cart_rule_2` = ' . (int) $this->id);\n        $r &= Db::getInstance()->delete('cart_rule_product_rule_group', '`id_cart_rule` = ' . (int) $this->id);\n        $r &= Db::getInstance()->delete('cart_rule_product_rule', 'NOT EXISTS (SELECT 1 FROM `' . _DB_PREFIX_ . 'cart_rule_product_rule_group`\n\t\t\tWHERE `' . _DB_PREFIX_ . 'cart_rule_product_rule`.`id_product_rule_group` = `' . _DB_PREFIX_ . 'cart_rule_product_rule_group`.`id_product_rule_group`)');\n        $r &= Db::getInstance()->delete('cart_rule_product_rule_value', 'NOT EXISTS (SELECT 1 FROM `' . _DB_PREFIX_ . 'cart_rule_product_rule`\n\t\t\tWHERE `' . _DB_PREFIX_ . 'cart_rule_product_rule_value`.`id_product_rule` = `' . _DB_PREFIX_ . 'cart_rule_product_rule`.`id_product_rule`)');\n\n        return (bool) $r;\n    }",
+    "add": "public function add($autodate = true, $null_values = false)\n    {\n        if (!$this->reduction_currency) {\n            $this->reduction_currency = Currency::getDefaultCurrencyId();\n        }\n\n        if (!parent::add($autodate, $null_values)) {\n            return false;\n        }\n\n        Configuration::updateGlobalValue('PS_CART_RULE_FEATURE_ACTIVE', '1');\n\n        return true;\n    }",
+    "update": "public function update($null_values = false)\n    {\n        Cache::clean('getContextualValue_' . $this->id . '_*');\n\n        if (!$this->reduction_currency) {\n            $this->reduction_currency = Currency::getDefaultCurrencyId();\n        }\n\n        if (!parent::update($null_values)) {\n            return false;\n        }\n\n        Configuration::updateGlobalValue(\n            'PS_CART_RULE_FEATURE_ACTIVE',\n            CartRule::isCurrentlyUsed($this->def['table'], true)\n        );\n\n        return true;\n    }",
+    "save": null
+  },
+  "Category.php": {
+    "delete": "public function delete()\n    {\n        if ((int) $this->id === 0 || (int) $this->id === (int) Configuration::get('PS_ROOT_CATEGORY')) {\n            return false;\n        }\n\n        $this->clearCache();\n\n        /** @var array<Category> $deletedChildren */\n        $deletedChildren = $this->getAllChildren();\n        /** @var array<Category> $allCat */\n        $allCat = $deletedChildren;\n        $allCat[] = $this;\n        foreach ($allCat as $cat) {\n            $cat->deleteLite();\n            if (!$cat->hasMultishopEntries()) {\n                $cat->deleteImage();\n                $cat->cleanGroups();\n                $cat->cleanAssoProducts();\n                // Delete associated restrictions on cart rules\n                CartRule::cleanProductRuleIntegrity('categories', [$cat->id]);\n                Category::cleanPositions($cat->id_parent);\n                /* Delete Categories in GroupReduction */\n                if (GroupReduction::getGroupsReductionByCategoryId((int) $cat->id)) {\n                    GroupReduction::deleteCategory($cat->id);\n                }\n            }\n        }\n\n        /* Rebuild the nested tree */\n        if (!$this->hasMultishopEntries() && !$this->doNotRegenerateNTree) {\n            Category::regenerateEntireNtree();\n        }\n\n        Hook::exec('actionCategoryDelete', ['category' => $this, 'deleted_children' => $deletedChildren]);\n\n        return true;\n    }",
+    "add": "public function add($autoDate = true, $nullValues = false)\n    {\n        if (!isset($this->level_depth)) {\n            $this->level_depth = $this->calcLevelDepth();\n        }\n\n        if ($this->is_root_category && ($idRootCategory = (int) Configuration::get('PS_ROOT_CATEGORY'))) {\n            $this->id_parent = $idRootCategory;\n        }\n\n        $ret = parent::add($autoDate, $nullValues);\n        if (Tools::isSubmit('checkBoxShopAsso_category')) {\n            foreach (Tools::getValue('checkBoxShopAsso_category') as $idShop => $value) {\n                $position = (int) Category::getLastPosition((int) $this->id_parent, $idShop);\n                $this->addPosition($position, $idShop);\n            }\n        } else {\n            foreach (Shop::getShops(true) as $shop) {\n                $position = (int) Category::getLastPosition((int) $this->id_parent, $shop['id_shop']);\n                $this->addPosition($position, $shop['id_shop']);\n            }\n        }\n\n        if (!$this->doNotRegenerateNTree) {\n            Category::regenerateEntireNtree();\n        }\n        // if access group is not set, initialize it with all groups\n        $this->updateGroup(($this->groupBox !== null) ? $this->groupBox : []);\n        Hook::exec('actionCategoryAdd', ['category' => $this]);\n\n        return $ret;\n    }",
+    "update": "public function update($nullValues = false)\n    {\n        if ($this->id_parent == $this->id) {\n            throw new PrestaShopException('a category cannot be its own parent');\n        }\n\n        if ($this->is_root_category && $this->id_parent != (int) Configuration::get('PS_ROOT_CATEGORY')) {\n            $this->is_root_category = false;\n        }\n\n        // Update group selection\n        $this->updateGroup($this->groupBox);\n\n        if ($this->level_depth != $this->calcLevelDepth()) {\n            $this->level_depth = $this->calcLevelDepth();\n            $changed = true;\n        }\n\n        if (Category::getParentId($this->id) !== (int) $this->id_parent) {\n            $changed = true;\n        }\n\n        // If the parent category was changed, we don't want to have 2 categories with the same position\n        if (!isset($changed)) {\n            $changed = $this->getDuplicatePosition();\n        }\n\n        if ($changed) {\n            if (Tools::isSubmit('checkBoxShopAsso_category')) {\n                foreach (Tools::getValue('checkBoxShopAsso_category') as $idAssoObject => $idShop) {\n                    $this->addPosition($this->position, (int) $idShop);\n                }\n            } else {\n                foreach (Shop::getShops(true) as $shop) {\n                    $this->addPosition($this->position, $shop['id_shop']);\n                }\n            }\n        }\n\n        $ret = parent::update($nullValues);\n        if ($changed && !$this->doNotRegenerateNTree) {\n            $this->cleanPositions((int) $this->id_parent);\n            Category::regenerateEntireNtree();\n            $this->recalculateLevelDepth($this->id);\n        }\n        Hook::exec('actionCategoryUpdate', ['category' => $this]);\n\n        return $ret;\n    }",
+    "save": null
+  },
+  "CMS.php": {
+    "delete": "public function delete()\n    {\n        if (parent::delete()) {\n            return $this->cleanPositions($this->id_cms_category);\n        }\n\n        return false;\n    }",
+    "add": "public function add($autoDate = true, $nullValues = false)\n    {\n        $this->position = CMS::getLastPosition((int) $this->id_cms_category);\n\n        return parent::add($autoDate, true);\n    }",
+    "update": "public function update($nullValues = false)\n    {\n        if (parent::update($nullValues)) {\n            return $this->cleanPositions($this->id_cms_category);\n        }\n\n        return false;\n    }",
+    "save": null
+  },
+  "CMSCategory.php": {
+    "delete": "public function delete()\n    {\n        if ((int) $this->id === 1) {\n            return false;\n        }\n\n        $this->clearCache();\n\n        /** @var array<CMSCategory> $cmsCategories */\n        $cmsCategories = $this->getAllChildren();\n        $cmsCategories[] = $this;\n        foreach ($cmsCategories as $cmsCategory) {\n            $cmsCategory->deleteCMS();\n            $cmsCategory->deleteLite();\n            CMSCategory::cleanPositions($cmsCategory->id_parent);\n        }\n\n        return true;\n    }",
+    "add": "public function add($autodate = true, $null_values = false)\n    {\n        $this->position = CMSCategory::getLastPosition((int) $this->id_parent);\n        $this->level_depth = $this->calcLevelDepth();\n        foreach ($this->name as $k => $value) {\n            if (preg_match('/^[1-9]\\./', $value)) {\n                $this->name[$k] = '0' . $value;\n            }\n        }\n        $ret = parent::add($autodate, $null_values);\n        $this->cleanPositions($this->id_parent);\n\n        return $ret;\n    }",
+    "update": "public function update($null_values = false)\n    {\n        $this->level_depth = $this->calcLevelDepth();\n        foreach ($this->name as $k => $value) {\n            if (preg_match('/^[1-9]\\./', $value)) {\n                $this->name[$k] = '0' . $value;\n            }\n        }\n\n        return parent::update($null_values);\n    }",
+    "save": null
+  },
+  "CMSRole.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Combination.php": {
+    "delete": "public function delete()\n    {\n        if (!parent::delete()) {\n            return false;\n        }\n\n        $shopIdsList = $this->getShopIdsList();\n\n        // Removes the product from StockAvailable for the related shops\n        if (!empty($shopIdsList)) {\n            foreach ($shopIdsList as $shopId) {\n                StockAvailable::removeProductFromStockAvailable((int) $this->id_product, (int) $this->id, $shopId);\n            }\n        } else {\n            StockAvailable::removeProductFromStockAvailable((int) $this->id_product, (int) $this->id);\n        }\n\n        if ($specificPrices = SpecificPrice::getByProductId((int) $this->id_product, (int) $this->id)) {\n            foreach ($specificPrices as $specificPrice) {\n                $price = new SpecificPrice((int) $specificPrice['id_specific_price']);\n                $price->delete();\n            }\n        }\n\n        if (!$this->hasMultishopEntries() && !$this->deleteAssociations()) {\n            return false;\n        }\n\n        if (!$this->deleteCartProductCombination()) {\n            return false;\n        }\n\n        $this->deleteFromSupplier($this->id_product);\n        $this->deleteFromPack();\n        Product::updateDefaultAttribute($this->id_product);\n        Tools::clearColorListCache((int) $this->id_product);\n\n        return true;\n    }",
+    "add": "public function add($autoDate = true, $nullValues = false)\n    {\n        if ($this->default_on) {\n            $this->default_on = true;\n        } else {\n            $this->default_on = null;\n        }\n\n        if (!parent::add($autoDate, $nullValues)) {\n            return false;\n        }\n\n        $product = new Product((int) $this->id_product);\n        $shopIdsList = $this->getShopIdsList();\n\n        if ($product->getType() == Product::PTYPE_VIRTUAL) {\n            $outOfStock = OutOfStockType::OUT_OF_STOCK_AVAILABLE;\n        } else {\n            $outOfStock = StockAvailable::outOfStock((int) $this->id_product);\n        }\n\n        if (!empty($shopIdsList)) {\n            foreach ($shopIdsList as $shopId) {\n                StockAvailable::setProductOutOfStock((int) $this->id_product, $outOfStock, $shopId, (int) $this->id);\n            }\n        } else {\n            // This creates stock_available for combination as a side effect\n            StockAvailable::setProductOutOfStock((int) $this->id_product, $outOfStock, $this->id_shop, $this->id);\n        }\n\n        SpecificPriceRule::applyAllRules([(int) $this->id_product]);\n\n        Product::updateDefaultAttribute($this->id_product);\n\n        return true;\n    }",
+    "update": "public function update($nullValues = false)\n    {\n        if ($this->default_on) {\n            $this->default_on = true;\n        } else {\n            $this->default_on = null;\n        }\n\n        $return = parent::update($nullValues);\n        Product::updateDefaultAttribute($this->id_product);\n\n        return $return;\n    }",
+    "save": null
+  },
+  "Configuration.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Connection.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "ConnectionsSource.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Contact.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Country.php": {
+    "delete": "public function delete()\n    {\n        if (!parent::delete()) {\n            return false;\n        }\n\n        return Db::getInstance()->execute('DELETE FROM ' . _DB_PREFIX_ . 'cart_rule_country WHERE id_country = ' . (int) $this->id);\n    }",
+    "add": "public function add($autoDate = true, $nullValues = false)\n    {\n        $return = parent::add($autoDate, $nullValues) && self::addModuleRestrictions([], [['id_country' => $this->id]], []);\n\n        return $return;\n    }",
+    "update": null,
+    "save": null
+  },
+  "Currency.php": {
+    "delete": "public function delete()\n    {\n        if ($this->id == Currency::getDefaultCurrencyId()) {\n            $result = Db::getInstance()->getRow('SELECT `id_currency` FROM ' . _DB_PREFIX_ . 'currency WHERE `id_currency` != ' . (int) $this->id . ' AND `deleted` = 0');\n            if (empty($result['id_currency'])) {\n                return false;\n            }\n\n            Configuration::updateValue('PS_CURRENCY_DEFAULT', $result['id_currency']);\n        }\n\n        // Remove currency restrictions\n        $res = Db::getInstance()->delete('module_currency', 'id_currency = ' . (int) $this->id);\n\n        return $res && $this->softDelete();\n    }",
+    "add": "public function add($autoDate = true, $nullValues = false)\n    {\n        if ((float) $this->conversion_rate <= 0) {\n            return false;\n        }\n\n        return Currency::exists($this->iso_code) ? false : parent::add($autoDate, $nullValues);\n    }",
+    "update": "public function update($nullValues = false)\n    {\n        if ((float) $this->conversion_rate <= 0) {\n            return false;\n        }\n\n        return parent::update($nullValues);\n    }",
+    "save": null
+  },
+  "Customer.php": {
+    "delete": "public function delete()\n    {\n        if (!count(Order::getCustomerOrders((int) $this->id))) {\n            $addresses = $this->getAddresses((int) Configuration::get('PS_LANG_DEFAULT'));\n            foreach ($addresses as $address) {\n                $obj = new Address((int) $address['id_address']);\n                $obj->delete();\n            }\n        }\n        Db::getInstance()->execute('DELETE FROM `' . _DB_PREFIX_ . 'customer_group` WHERE `id_customer` = ' . (int) $this->id);\n        Db::getInstance()->execute('DELETE FROM ' . _DB_PREFIX_ . 'message WHERE id_customer=' . (int) $this->id);\n        Db::getInstance()->execute('DELETE FROM ' . _DB_PREFIX_ . 'specific_price WHERE id_customer=' . (int) $this->id);\n\n        $carts = Db::getInstance()->executeS('SELECT id_cart FROM ' . _DB_PREFIX_ . 'cart WHERE id_customer=' . (int) $this->id . ' AND id_cart NOT IN (SELECT id_cart FROM `' . _DB_PREFIX_ . 'orders`)');\n        if ($carts) {\n            foreach ($carts as $cart) {\n                Db::getInstance()->execute('DELETE FROM ' . _DB_PREFIX_ . 'cart WHERE id_cart=' . (int) $cart['id_cart']);\n                Db::getInstance()->execute('DELETE FROM ' . _DB_PREFIX_ . 'cart_product WHERE id_cart=' . (int) $cart['id_cart']);\n            }\n        }\n\n        $cts = Db::getInstance()->executeS('SELECT id_customer_thread FROM ' . _DB_PREFIX_ . 'customer_thread WHERE id_customer=' . (int) $this->id);\n        if ($cts) {\n            foreach ($cts as $ct) {\n                Db::getInstance()->execute('DELETE FROM ' . _DB_PREFIX_ . 'customer_thread WHERE id_customer_thread=' . (int) $ct['id_customer_thread']);\n                Db::getInstance()->execute('DELETE FROM ' . _DB_PREFIX_ . 'customer_message WHERE id_customer_thread=' . (int) $ct['id_customer_thread']);\n            }\n        }\n\n        CartRule::deleteByIdCustomer((int) $this->id);\n\n        return parent::delete();\n    }",
+    "add": "public function add($autoDate = true, $nullValues = true)\n    {\n        $this->id_shop = ($this->id_shop) ? $this->id_shop : Context::getContext()->shop->id;\n        $this->id_shop_group = ($this->id_shop_group) ? $this->id_shop_group : Context::getContext()->shop->id_shop_group;\n        $this->id_lang = ($this->id_lang) ? $this->id_lang : Context::getContext()->language->id;\n        $this->birthday = (empty($this->years) ? $this->birthday : (int) $this->years . '-' . (int) $this->months . '-' . (int) $this->days);\n        $this->secure_key = md5(uniqid((string) mt_rand(0, mt_getrandmax()), true));\n        $this->last_passwd_gen = date('Y-m-d H:i:s', strtotime('-' . Configuration::get('PS_PASSWD_TIME_FRONT') . 'minutes'));\n\n        if ($this->newsletter && !Validate::isDate($this->newsletter_date_add)) {\n            $this->newsletter_date_add = date('Y-m-d H:i:s');\n        }\n\n        // Set default group of the customer depending on prestashop configuration\n        if ($this->id_default_group == Configuration::get('PS_CUSTOMER_GROUP')) {\n            if ($this->is_guest) {\n                $this->id_default_group = (int) Configuration::get('PS_GUEST_GROUP');\n            } else {\n                $this->id_default_group = (int) Configuration::get('PS_CUSTOMER_GROUP');\n            }\n        }\n\n        /* Can't create a guest customer, if this feature is disabled */\n        if ($this->is_guest && !Configuration::get('PS_GUEST_CHECKOUT_ENABLED')) {\n            return false;\n        }\n        $success = parent::add($autoDate, $nullValues);\n\n        // Update the group assignments themselves\n        $this->updateGroup($this->groupBox);\n\n        return $success;\n    }",
+    "update": "public function update($nullValues = false)\n    {\n        $this->birthday = (empty($this->years) ? $this->birthday : (int) $this->years . '-' . (int) $this->months . '-' . (int) $this->days);\n\n        if ($this->newsletter && !Validate::isDate($this->newsletter_date_add)) {\n            $this->newsletter_date_add = date('Y-m-d H:i:s');\n        }\n        if (isset(Context::getContext()->controller) && Context::getContext()->controller->controller_type == 'admin') {\n            $this->updateGroup($this->groupBox);\n        }\n\n        if ($this->deleted) {\n            $addresses = $this->getAddresses((int) Configuration::get('PS_LANG_DEFAULT'));\n            foreach ($addresses as $address) {\n                $obj = new Address((int) $address['id_address']);\n                $obj->deleted = true;\n                $obj->save();\n            }\n        }\n\n        try {\n            return parent::update(true);\n        } catch (\\PrestaShopException $exception) {\n            $message = $exception->getMessage();\n            error_log($message);\n\n            return false;\n        }\n    }",
+    "save": null
+  },
+  "CustomerMessage.php": {
+    "delete": "public function delete()\n    {\n        if (!empty($this->file_name)) {\n            @unlink(_PS_UPLOAD_DIR_ . basename($this->file_name));\n        }\n\n        return parent::delete();\n    }",
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "CustomerSession.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "CustomerThread.php": {
+    "delete": "public function delete()\n    {\n        if (!Validate::isUnsignedId($this->id)) {\n            return false;\n        }\n\n        $return = true;\n        $result = Db::getInstance()->executeS(\n            '\n\t\t\tSELECT `id_customer_message`\n\t\t\tFROM `' . _DB_PREFIX_ . 'customer_message`\n\t\t\tWHERE `id_customer_thread` = ' . (int) $this->id\n        );\n\n        if (count($result)) {\n            foreach ($result as $res) {\n                $message = new CustomerMessage((int) $res['id_customer_message']);\n                if (!Validate::isLoadedObject($message)) {\n                    $return = false;\n                } else {\n                    $return = $return && $message->delete();\n                }\n            }\n        }\n\n        return $return && parent::delete();\n    }",
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Customization.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "CustomizationField.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "DateRange.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Delivery.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Employee.php": {
+    "delete": null,
+    "add": "public function add($autoDate = true, $nullValues = true)\n    {\n        $this->last_passwd_gen = date('Y-m-d H:i:s', strtotime('-' . Configuration::get('PS_PASSWD_TIME_BACK') . 'minutes'));\n        $this->updateTextDirection();\n\n        return parent::add($autoDate, $nullValues);\n    }",
+    "update": "public function update($nullValues = false)\n    {\n        if (empty($this->stats_date_from) || $this->stats_date_from == '0000-00-00') {\n            $this->stats_date_from = date('Y-m-d');\n        }\n\n        if (empty($this->stats_date_to) || $this->stats_date_to == '0000-00-00') {\n            $this->stats_date_to = date('Y-m-d');\n        }\n\n        $currentEmployee = new Employee((int) $this->id);\n\n        $this->updateTextDirection();\n\n        return parent::update($nullValues);\n    }",
+    "save": null
+  },
+  "EmployeeSession.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Feature.php": {
+    "delete": "public function delete()\n    {\n        /* Also delete related attributes */\n        Db::getInstance()->execute('\n\t\t\tDELETE\n\t\t\t\t`' . _DB_PREFIX_ . 'feature_value_lang`\n\t\t\tFROM\n\t\t\t\t`' . _DB_PREFIX_ . 'feature_value_lang`\n\t\t\t\tJOIN `' . _DB_PREFIX_ . 'feature_value`\n\t\t\t\t\tON (`' . _DB_PREFIX_ . 'feature_value_lang`.id_feature_value = `' . _DB_PREFIX_ . 'feature_value`.id_feature_value)\n\t\t\tWHERE\n\t\t\t\t`' . _DB_PREFIX_ . 'feature_value`.`id_feature` = ' . (int) $this->id . '\n\t\t');\n        Db::getInstance()->execute(\n            '\n\t\t\tDELETE FROM `' . _DB_PREFIX_ . 'feature_value`\n\t\t\tWHERE `id_feature` = ' . (int) $this->id\n        );\n        // Also delete related products\n        Db::getInstance()->execute(\n            '\n\t\t\tDELETE FROM `' . _DB_PREFIX_ . 'feature_product`\n\t\t\tWHERE `id_feature` = ' . (int) $this->id\n        );\n\n        $return = parent::delete();\n        if ($return) {\n            Hook::exec('actionFeatureDelete', ['id_feature' => $this->id]);\n        }\n\n        /* Reinitializing position */\n        $this->cleanPositions();\n\n        return $return;\n    }",
+    "add": "public function add($autoDate = true, $nullValues = false)\n    {\n        if ($this->position <= 0) {\n            $this->position = Feature::getHigherPosition() + 1;\n        }\n\n        $return = parent::add($autoDate, true);\n        Hook::exec('actionFeatureSave', ['id_feature' => $this->id]);\n\n        return $return;\n    }",
+    "update": "public function update($nullValues = false)\n    {\n        $this->clearCache();\n\n        $result = true;\n        $fields = $this->getFieldsLang();\n        foreach ($fields as $field) {\n            foreach (array_keys($field) as $key) {\n                if (!Validate::isTableOrIdentifier($key)) {\n                    die(Tools::displayError('Invalid column name in feature_lang table.'));\n                }\n            }\n\n            $sql = 'SELECT `id_lang` FROM `' . pSQL(_DB_PREFIX_ . $this->def['table']) . '_lang`\n\t\t\t\t\tWHERE `' . $this->def['primary'] . '` = ' . (int) $this->id . '\n\t\t\t\t\t\tAND `id_lang` = ' . (int) $field['id_lang'];\n            $mode = Db::getInstance()->getRow($sql);\n            $result = $result &&\n                (!$mode\n                    ? Db::getInstance()->insert($this->def['table'] . '_lang', $field)\n                    : Db::getInstance()->update(\n                        $this->def['table'] . '_lang',\n                        $field,\n                        '`' . $this->def['primary'] . '` = ' . (int) $this->id . ' AND `id_lang` = ' . (int) $field['id_lang']\n                    )\n                );\n        }\n        if ($result) {\n            $result = parent::update($nullValues);\n            if ($result) {\n                Hook::exec('actionFeatureSave', ['id_feature' => $this->id]);\n            }\n        }\n\n        return $result;\n    }",
+    "save": null
+  },
+  "FeatureFlag.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "FeatureValue.php": {
+    "delete": "public function delete()\n    {\n        /* Also delete related products */\n        Db::getInstance()->execute(\n            '\n\t\t\tDELETE FROM `' . _DB_PREFIX_ . 'feature_product`\n\t\t\tWHERE `id_feature_value` = ' . (int) $this->id\n        );\n        $return = parent::delete();\n\n        if ($return) {\n            Hook::exec('actionFeatureValueDelete', ['id_feature_value' => $this->id]);\n        }\n\n        return $return;\n    }",
+    "add": "public function add($autoDate = true, $nullValues = false)\n    {\n        $return = parent::add($autoDate, $nullValues);\n        if ($return) {\n            Hook::exec('actionFeatureValueSave', ['id_feature_value' => $this->id]);\n        }\n\n        return $return;\n    }",
+    "update": "public function update($nullValues = false)\n    {\n        $return = parent::update($nullValues);\n        if ($return) {\n            Hook::exec('actionFeatureValueSave', ['id_feature_value' => $this->id]);\n        }\n\n        return $return;\n    }",
+    "save": null
+  },
+  "Gender.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Group.php": {
+    "delete": "public function delete()\n    {\n        if ($this->id == (int) Configuration::get('PS_CUSTOMER_GROUP')) {\n            return false;\n        }\n        if (parent::delete()) {\n            Db::getInstance()->execute('DELETE FROM `' . _DB_PREFIX_ . 'cart_rule_group` WHERE `id_group` = ' . (int) $this->id);\n            Db::getInstance()->execute('DELETE FROM `' . _DB_PREFIX_ . 'customer_group` WHERE `id_group` = ' . (int) $this->id);\n            Db::getInstance()->execute('DELETE FROM `' . _DB_PREFIX_ . 'category_group` WHERE `id_group` = ' . (int) $this->id);\n            Db::getInstance()->execute('DELETE FROM `' . _DB_PREFIX_ . 'group_reduction` WHERE `id_group` = ' . (int) $this->id);\n            Db::getInstance()->execute('DELETE FROM `' . _DB_PREFIX_ . 'product_group_reduction_cache` WHERE `id_group` = ' . (int) $this->id);\n            $this->truncateModulesRestrictions($this->id);\n\n            // Add default group (id 3) to customers without groups\n            Db::getInstance()->execute('INSERT INTO `' . _DB_PREFIX_ . 'customer_group` (\n\t\t\t\tSELECT c.id_customer, ' . (int) Configuration::get('PS_CUSTOMER_GROUP') . ' FROM `' . _DB_PREFIX_ . 'customer` c\n\t\t\t\tLEFT JOIN `' . _DB_PREFIX_ . 'customer_group` cg\n\t\t\t\tON cg.id_customer = c.id_customer\n\t\t\t\tWHERE cg.id_customer IS NULL)');\n\n            // Set to the customer the default group\n            // Select the minimal id from customer_group\n            Db::getInstance()->execute('UPDATE `' . _DB_PREFIX_ . 'customer` cg\n\t\t\t\tSET id_default_group =\n\t\t\t\t\tIFNULL((\n\t\t\t\t\t\tSELECT min(id_group) FROM `' . _DB_PREFIX_ . 'customer_group`\n\t\t\t\t\t\tWHERE id_customer = cg.id_customer),\n\t\t\t\t\t\t' . (int) Configuration::get('PS_CUSTOMER_GROUP') . ')\n\t\t\t\tWHERE `id_default_group` = ' . (int) $this->id);\n\n            // Remove group restrictions\n            $res = Db::getInstance()->delete('module_group', 'id_group = ' . (int) $this->id);\n\n            return $res;\n        }\n\n        return false;\n    }",
+    "add": "public function add($autodate = true, $null_values = false)\n    {\n        Configuration::updateGlobalValue('PS_GROUP_FEATURE_ACTIVE', '1');\n        if (parent::add($autodate, $null_values)) {\n            Category::setNewGroupForHome((int) $this->id);\n            Carrier::assignGroupToAllCarriers((int) $this->id);\n\n            return true;\n        }\n\n        return false;\n    }",
+    "update": "public function update($autodate = true, $null_values = false)\n    {\n        if (!Configuration::getGlobalValue('PS_GROUP_FEATURE_ACTIVE') && $this->reduction > 0) {\n            Configuration::updateGlobalValue('PS_GROUP_FEATURE_ACTIVE', 1);\n        }\n\n        return parent::update($null_values);\n    }",
+    "save": null
+  },
+  "GroupReduction.php": {
+    "delete": "public function delete()\n    {\n        $products = Db::getInstance(_PS_USE_SQL_SLAVE_)->executeS(\n            '\n\t\t\tSELECT cp.`id_product`\n\t\t\tFROM `' . _DB_PREFIX_ . 'category_product` cp\n\t\t\tWHERE cp.`id_category` = ' . (int) $this->id_category\n        );\n\n        $ids = [];\n        foreach ($products as $row) {\n            $ids[] = $row['id_product'];\n        }\n\n        if ($ids) {\n            Db::getInstance()->delete('product_group_reduction_cache', 'id_product IN (' . implode(', ', $ids) . ')');\n        }\n\n        return parent::delete();\n    }",
+    "add": "public function add($autodate = true, $null_values = false)\n    {\n        return parent::add($autodate, $null_values) && $this->_setCache();\n    }",
+    "update": "public function update($null_values = false)\n    {\n        return parent::update($null_values) && $this->_updateCache();\n    }",
+    "save": null
+  },
+  "Guest.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Hook.php": {
+    "delete": null,
+    "add": "public function add($autodate = true, $null_values = false)\n    {\n        Cache::clean('hook_idsbyname');\n        Cache::clean('hook_idsbyname_withalias');\n        Cache::clean('active_hooks');\n\n        return parent::add($autodate, $null_values);\n    }",
+    "update": null,
+    "save": null
+  },
+  "Image.php": {
+    "delete": "public function delete()\n    {\n        if (!parent::delete()) {\n            return false;\n        }\n\n        if ($this->hasMultishopEntries()) {\n            return true;\n        }\n\n        if (!$this->deleteProductAttributeImage() || !$this->deleteImage()) {\n            return false;\n        }\n\n        // update positions\n        Db::getInstance()->execute('SET @position:=0', false);\n        Db::getInstance()->execute('UPDATE `' . _DB_PREFIX_ . 'image` SET position=(@position:=@position+1)\n\t\t\t\t\t\t\t\t\tWHERE `id_product` = ' . (int) $this->id_product . ' ORDER BY position ASC');\n\n        return true;\n    }",
+    "add": "public function add($autoDate = true, $nullValues = false)\n    {\n        if ($this->position <= 0) {\n            $this->position = Image::getHighestPosition($this->id_product) + 1;\n        }\n\n        if ($this->cover) {\n            $this->cover = true;\n        } else {\n            $this->cover = null;\n        }\n\n        return parent::add($autoDate, $nullValues);\n    }",
+    "update": "public function update($nullValues = false)\n    {\n        if ($this->cover) {\n            $this->cover = true;\n        } else {\n            $this->cover = null;\n        }\n\n        return parent::update($nullValues);\n    }",
+    "save": null
+  },
+  "ImageType.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Language.php": {
+    "delete": "public function delete()\n    {\n        if (!$this->hasMultishopEntries() || Shop::getContext() == Shop::CONTEXT_ALL) {\n            if (empty($this->iso_code)) {\n                $this->iso_code = Language::getIsoById($this->id);\n            }\n\n            // Now let's delete all entries in _lang tables for given languages\n            $result = Db::getInstance()->executeS('SHOW TABLES FROM `' . _DB_NAME_ . '`');\n\n            // A key we will be searching for, database returns it in this weird format\n            $tableNameKey = 'Tables_in_' . _DB_NAME_;\n\n            foreach ($result as $row) {\n                // If we received empty table name for some reason or the language name does not end with _lang\n                if (empty($row[$tableNameKey]) || !preg_match('/_lang$/', $row[$tableNameKey])) {\n                    continue;\n                }\n\n                // We check if this table contains id_lang column\n                $columns = Db::getInstance()->executeS('SHOW COLUMNS FROM `' . $row[$tableNameKey] . '`');\n                $idLangColumnExists = false;\n                foreach ($columns as $column) {\n                    if ($column['Field'] == 'id_lang') {\n                        $idLangColumnExists = true;\n                    }\n                }\n\n                // If it doesn't, nothing to delete\n                if ($idLangColumnExists === false) {\n                    continue;\n                }\n\n                // Delete all entries for this language ID\n                Db::getInstance()->execute('DELETE FROM `' . $row[$tableNameKey] . '` WHERE `id_lang` = ' . (int) $this->id);\n            }\n\n            // Delete tags\n            Db::getInstance()->execute('DELETE FROM ' . _DB_PREFIX_ . 'tag WHERE id_lang = ' . (int) $this->id);\n\n            // Delete search words\n            Db::getInstance()->execute('DELETE FROM ' . _DB_PREFIX_ . 'search_word WHERE id_lang = ' . (int) $this->id);\n\n            // Files deletion\n            foreach (Language::getFilesList($this->iso_code, _THEME_NAME_, false, false, false, true, true) as $key => $file) {\n                if (file_exists($key)) {\n                    unlink($key);\n                }\n            }\n\n            $modList = scandir(_PS_MODULE_DIR_, SCANDIR_SORT_NONE);\n            foreach ($modList as $mod) {\n                if (!is_dir(_PS_MODULE_DIR_ . $mod)) {\n                    continue;\n                }\n                Tools::deleteDirectory(_PS_MODULE_DIR_ . $mod . '/mails/' . $this->iso_code);\n                $files = @scandir(_PS_MODULE_DIR_ . $mod . '/mails/', SCANDIR_SORT_NONE);\n                if (is_array($files) && count($files) <= 2) {\n                    Tools::deleteDirectory(_PS_MODULE_DIR_ . $mod . '/mails/');\n                }\n\n                if (file_exists(_PS_MODULE_DIR_ . $mod . '/' . $this->iso_code . '.php')) {\n                    unlink(_PS_MODULE_DIR_ . $mod . '/' . $this->iso_code . '.php');\n                    $files = @scandir(_PS_MODULE_DIR_ . $mod, SCANDIR_SORT_NONE);\n                    if (count($files) <= 2) {\n                        Tools::deleteDirectory(_PS_MODULE_DIR_ . $mod);\n                    }\n                }\n            }\n\n            if (file_exists(_PS_MAIL_DIR_ . $this->iso_code)) {\n                Tools::deleteDirectory(_PS_MAIL_DIR_ . $this->iso_code);\n            }\n            if (file_exists(_PS_TRANSLATIONS_DIR_ . $this->iso_code)) {\n                Tools::deleteDirectory(_PS_TRANSLATIONS_DIR_ . $this->iso_code);\n            }\n\n            (new LanguageImageManager())->deleteImages($this->id, $this->iso_code);\n        }\n\n        if (!parent::delete()) {\n            return false;\n        }\n\n        return true;\n    }",
+    "add": "public function add($autodate = true, $nullValues = false, $only_add = false)\n    {\n        if (!parent::add($autodate, $nullValues)) {\n            return false;\n        }\n\n        if ($this->is_rtl) {\n            static::getRtlStylesheetProcessor()\n                ->setProcessBOTheme(true)\n                ->setProcessDefaultModules(true)\n                ->process();\n        }\n\n        if ($only_add) {\n            return true;\n        }\n\n        // @todo Since a lot of modules are not in right format with their primary keys name, just get true ...\n        $this->loadUpdateSQL();\n\n        return true;\n    }",
+    "update": "public function update($nullValues = false)\n    {\n        if (!parent::update($nullValues)) {\n            return false;\n        }\n\n        // Generate RTL stylesheets if language is_rtl parameter changes\n        if ($this->is_rtl) {\n            static::getRtlStylesheetProcessor()\n                ->setProcessBOTheme(true)\n                ->setProcessDefaultModules(true)\n                ->process();\n        }\n\n        return true;\n    }",
+    "save": null
+  },
+  "Mail.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Manufacturer.php": {
+    "delete": "public function delete()\n    {\n        $address = new Address($this->id_address);\n\n        if (Validate::isLoadedObject($address) && !$address->delete()) {\n            return false;\n        }\n\n        if (parent::delete()) {\n            CartRule::cleanProductRuleIntegrity('manufacturers', $this->id);\n\n            return $this->deleteImage();\n        }\n\n        return false;\n    }",
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Message.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Meta.php": {
+    "delete": "public function delete()\n    {\n        if (!parent::delete()) {\n            return false;\n        }\n\n        return Tools::generateHtaccess();\n    }",
+    "add": null,
+    "update": "public function update($nullValues = false)\n    {\n        if (!parent::update($nullValues)) {\n            return false;\n        }\n\n        return Tools::generateHtaccess();\n    }",
+    "save": null
+  },
+  "Page.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "PrestaShopLogger.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Product.php": {
+    "delete": "public function delete()\n    {\n        /*\n         * @since 1.5.0\n         * It is NOT possible to delete a product if there are currently:\n         * - physical stock for this product\n         * - supply order(s) for this product\n         */\n        if (Configuration::get('PS_ADVANCED_STOCK_MANAGEMENT') && $this->advanced_stock_management) {\n            $stock_manager = StockManagerFactory::getManager();\n            $physical_quantity = $stock_manager->getProductPhysicalQuantities($this->id, 0);\n            $real_quantity = $stock_manager->getProductRealQuantities($this->id, 0);\n            if ($physical_quantity > 0) {\n                return false;\n            }\n            if ($real_quantity > $physical_quantity) {\n                return false;\n            }\n\n            $warehouse_product_locations = ServiceLocator::get('\\\\PrestaShop\\\\PrestaShop\\\\Core\\\\Foundation\\\\Database\\\\EntityManager')->getRepository('WarehouseProductLocation')->findByIdProduct($this->id);\n            foreach ($warehouse_product_locations as $warehouse_product_location) {\n                $warehouse_product_location->delete();\n            }\n\n            $stocks = ServiceLocator::get('\\\\PrestaShop\\\\PrestaShop\\\\Core\\\\Foundation\\\\Database\\\\EntityManager')->getRepository('Stock')->findByIdProduct($this->id);\n            foreach ($stocks as $stock) {\n                $stock->delete();\n            }\n        }\n        $result = parent::delete();\n\n        // Removes the product from StockAvailable, for the current shop\n        $id_shop_list = count($this->id_shop_list) ? $this->id_shop_list : Shop::getContextListShopID();\n        if (!empty($id_shop_list)) {\n            foreach ($id_shop_list as $shopId) {\n                StockAvailable::removeProductFromStockAvailable($this->id, null, $shopId);\n            }\n        } else {\n            StockAvailable::removeProductFromStockAvailable($this->id);\n        }\n\n        // If there are still entries in product_shop, don't remove completely the product\n        if ($this->hasMultishopEntries()) {\n            $this->updateDefaultShop();\n\n            return true;\n        }\n\n        Hook::exec('actionProductDelete', ['id_product' => (int) $this->id, 'product' => $this]);\n        if (\n            !$result ||\n            !$this->deleteProductAttributes() ||\n            !$this->deleteImages() ||\n            !GroupReduction::deleteProductReduction($this->id) ||\n            !$this->deleteCategories(false) ||\n            !$this->deleteProductFeatures() ||\n            !$this->deleteTags() ||\n            !$this->deleteCartProducts() ||\n            !$this->deleteAttachments(false) ||\n            !$this->deleteCustomization() ||\n            !SpecificPrice::deleteByProductId((int) $this->id) ||\n            !$this->deletePack() ||\n            !$this->deleteProductSale() ||\n            !$this->deleteSearchIndexes() ||\n            !$this->deleteAccessories() ||\n            !$this->deleteCarrierRestrictions() ||\n            !$this->deleteFromAccessories() ||\n            !$this->deleteFromSupplier() ||\n            !$this->deleteDownload() ||\n            !$this->deleteFromCartRules()\n        ) {\n            return false;\n        }\n\n        return true;\n    }",
+    "add": "public function add($autodate = true, $null_values = false)\n    {\n        if ($this->is_virtual) {\n            $this->product_type = ProductType::TYPE_VIRTUAL;\n        }\n\n        if (!parent::add($autodate, $null_values)) {\n            return false;\n        }\n\n        $id_shop_list = Shop::getContextListShopID();\n        if (count($this->id_shop_list)) {\n            $id_shop_list = $this->id_shop_list;\n        }\n\n        if ($this->getType() == Product::PTYPE_VIRTUAL) {\n            foreach ($id_shop_list as $value) {\n                StockAvailable::setProductOutOfStock((int) $this->id, OutOfStockType::OUT_OF_STOCK_AVAILABLE, $value);\n            }\n\n            if ($this->active && !Configuration::get('PS_VIRTUAL_PROD_FEATURE_ACTIVE')) {\n                Configuration::updateGlobalValue('PS_VIRTUAL_PROD_FEATURE_ACTIVE', '1');\n            }\n        } else {\n            foreach ($id_shop_list as $value) {\n                StockAvailable::setProductOutOfStock((int) $this->id, OutOfStockType::OUT_OF_STOCK_DEFAULT, $value);\n            }\n        }\n\n        $this->setGroupReduction();\n        $this->updateUnitRatio();\n\n        Hook::exec('actionProductSave', ['id_product' => (int) $this->id, 'product' => $this]);\n\n        return true;\n    }",
+    "update": "public function update($null_values = false)\n    {\n        if ($this->is_virtual) {\n            $this->product_type = ProductType::TYPE_VIRTUAL;\n        }\n\n        $return = parent::update($null_values);\n        $this->setGroupReduction();\n        $this->updateUnitRatio();\n\n        // Sync stock Reference, EAN13, MPN and UPC\n        if (Configuration::get('PS_ADVANCED_STOCK_MANAGEMENT') && StockAvailable::dependsOnStock($this->id, Context::getContext()->shop->id)) {\n            Db::getInstance()->update('stock', [\n                'reference' => pSQL($this->reference),\n                'ean13' => pSQL($this->ean13),\n                'isbn' => pSQL($this->isbn),\n                'upc' => pSQL($this->upc),\n                'mpn' => pSQL($this->mpn),\n            ], 'id_product = ' . (int) $this->id . ' AND id_product_attribute = 0');\n        }\n\n        Hook::exec('actionProductSave', ['id_product' => (int) $this->id, 'product' => $this]);\n        Hook::exec('actionProductUpdate', ['id_product' => (int) $this->id, 'product' => $this]);\n        if ($this->getType() == Product::PTYPE_VIRTUAL && $this->active && !Configuration::get('PS_VIRTUAL_PROD_FEATURE_ACTIVE')) {\n            Configuration::updateGlobalValue('PS_VIRTUAL_PROD_FEATURE_ACTIVE', '1');\n        }\n\n        return $return;\n    }",
+    "save": null
+  },
+  "ProductAttribute.php": {
+    "delete": "public function delete()\n    {\n        if (!$this->hasMultishopEntries() || Shop::getContext() == Shop::CONTEXT_ALL) {\n            $result = Db::getInstance()->executeS('SELECT id_product_attribute FROM ' . _DB_PREFIX_ . 'product_attribute_combination WHERE id_attribute = ' . (int) $this->id);\n            $products = [];\n\n            foreach ($result as $row) {\n                $combination = new Combination($row['id_product_attribute']);\n                $newRequest = Db::getInstance()->executeS('SELECT id_product, default_on FROM ' . _DB_PREFIX_ . 'product_attribute WHERE id_product_attribute = ' . (int) $row['id_product_attribute']);\n                foreach ($newRequest as $value) {\n                    if ($value['default_on'] == 1) {\n                        $products[] = $value['id_product'];\n                    }\n                }\n                $combination->delete();\n            }\n\n            foreach ($products as $product) {\n                $result = Db::getInstance()->executeS('SELECT id_product_attribute FROM ' . _DB_PREFIX_ . 'product_attribute WHERE id_product = ' . (int) $product . ' LIMIT 1');\n                foreach ($result as $row) {\n                    if (Validate::isLoadedObject($product = new Product((int) $product))) {\n                        $product->deleteDefaultAttributes();\n                        $product->setDefaultAttribute($row['id_product_attribute']);\n                    }\n                }\n            }\n\n            // Delete associated restrictions on cart rules\n            CartRule::cleanProductRuleIntegrity('attributes', $this->id);\n\n            /* Reinitializing position */\n            $this->cleanPositions((int) $this->id_attribute_group);\n        }\n        $return = parent::delete();\n        if ($return) {\n            Hook::exec('actionAttributeDelete', ['id_attribute' => $this->id]);\n        }\n\n        return $return;\n    }",
+    "add": "public function add($autoDate = true, $nullValues = false)\n    {\n        if ($this->position <= 0) {\n            $this->position = static::getHigherPosition($this->id_attribute_group) + 1;\n        }\n\n        $return = parent::add($autoDate, $nullValues);\n\n        if ($return) {\n            Hook::exec('actionAttributeSave', ['id_attribute' => $this->id]);\n        }\n\n        return $return;\n    }",
+    "update": "public function update($nullValues = false)\n    {\n        $return = parent::update($nullValues);\n\n        if ($return) {\n            Hook::exec('actionAttributeSave', ['id_attribute' => $this->id]);\n        }\n\n        return $return;\n    }",
+    "save": null
+  },
+  "ProductDownload.php": {
+    "delete": "public function delete($deleteFile = false)\n    {\n        $result = parent::delete();\n        if ($result && $deleteFile) {\n            return $this->deleteFile();\n        }\n\n        return $result;\n    }",
+    "add": "public function add($autoDate = true, $nullValues = false)\n    {\n        return (bool) parent::add($autoDate, $nullValues);\n    }",
+    "update": "public function update($nullValues = false)\n    {\n        if (parent::update($nullValues)) {\n            // Refresh cache of feature detachable because the row can be deactive\n            //Configuration::updateGlobalValue('PS_VIRTUAL_PROD_FEATURE_ACTIVE', ProductDownload::isCurrentlyUsed($this->def['table'], true));\n            return true;\n        }\n\n        return false;\n    }",
+    "save": null
+  },
+  "ProductSupplier.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Profile.php": {
+    "delete": "public function delete()\n    {\n        if (parent::delete()) {\n            return\n                Db::getInstance()->execute('DELETE FROM `' . _DB_PREFIX_ . 'access` WHERE `id_profile` = ' . (int) $this->id)\n                && Db::getInstance()->execute('DELETE FROM `' . _DB_PREFIX_ . 'module_access` WHERE `id_profile` = ' . (int) $this->id);\n        }\n\n        return false;\n    }",
+    "add": "public function add($autodate = true, $null_values = false)\n    {\n        return parent::add($autodate, true);\n    }",
+    "update": null,
+    "save": null
+  },
+  "QuickAccess.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "RequestSql.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Risk.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "SearchEngine.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "SpecificPrice.php": {
+    "delete": "public function delete()\n    {\n        if (parent::delete()) {\n            // Flush cache when we deletind a new specific price\n            $this->flushCache();\n            // Refresh cache of feature detachable\n            Configuration::updateGlobalValue('PS_SPECIFIC_PRICE_FEATURE_ACTIVE', SpecificPrice::isCurrentlyUsed($this->def['table']));\n\n            return true;\n        }\n\n        return false;\n    }",
+    "add": "public function add($autodate = true, $nullValues = false)\n    {\n        if (parent::add($autodate, $nullValues)) {\n            // Flush cache when we adding a new specific price\n            $this->flushCache();\n            // Set cache of feature detachable to true\n            Configuration::updateGlobalValue('PS_SPECIFIC_PRICE_FEATURE_ACTIVE', '1');\n\n            return true;\n        }\n\n        return false;\n    }",
+    "update": "public function update($null_values = false)\n    {\n        if (parent::update($null_values)) {\n            // Flush cache when we updating a new specific price\n            $this->flushCache();\n\n            return true;\n        }\n\n        return false;\n    }",
+    "save": null
+  },
+  "SpecificPriceRule.php": {
+    "delete": "public function delete()\n    {\n        $this->deleteConditions();\n        Db::getInstance()->execute('DELETE FROM ' . _DB_PREFIX_ . 'specific_price WHERE id_specific_price_rule=' . (int) $this->id);\n\n        return (bool) parent::delete();\n    }",
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "State.php": {
+    "delete": "public function delete()\n    {\n        if (!$this->isUsed()) {\n            // Database deletion\n            $result = Db::getInstance()->delete($this->def['table'], '`' . $this->def['primary'] . '` = ' . (int) $this->id);\n            if (!$result) {\n                return false;\n            }\n\n            // Database deletion for multilingual fields related to the object\n            if (!empty($this->def['multilang'])) {\n                Db::getInstance()->delete(bqSQL($this->def['table']) . '_lang', '`' . $this->def['primary'] . '` = ' . (int) $this->id);\n            }\n\n            return $result;\n        } else {\n            return false;\n        }\n    }",
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Store.php": {
+    "delete": null,
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Supplier.php": {
+    "delete": "public function delete()\n    {\n        $res = parent::delete();\n        if ($res) {\n            CartRule::cleanProductRuleIntegrity('suppliers', $this->id);\n\n            return $this->deleteImage();\n        }\n\n        return $res;\n    }",
+    "add": null,
+    "update": null,
+    "save": null
+  },
+  "Tab.php": {
+    "delete": "public function delete()\n    {\n        if (parent::delete()) {\n            $slug = 'ROLE_MOD_TAB_' . strtoupper($this->class_name);\n\n            foreach (['CREATE', 'READ', 'UPDATE', 'DELETE'] as $action) {\n                Db::getInstance()->execute('DELETE FROM `' . _DB_PREFIX_ . 'authorization_role` WHERE `slug` = \"' . $slug . '_' . $action . '\"');\n            }\n\n            if (is_array(self::$_getIdFromClassName) && isset(self::$_getIdFromClassName[strtolower($this->class_name)])) {\n                self::$_getIdFromClassName = null;\n            }\n\n            return $this->cleanPositions($this->id_parent);\n        }\n\n        return false;\n    }",
+    "add": "public function add($autoDate = true, $nullValues = false)\n    {\n        self::$_cache_tabs = [];\n\n        // Set good position for new tab\n        $this->position = Tab::getNewLastPosition($this->id_parent);\n        $this->module = Tools::strtolower($this->module);\n\n        // Add tab\n        if (parent::add($autoDate, $nullValues)) {\n            //forces cache to be reloaded\n            self::$_getIdFromClassName = null;\n\n            return Tab::initAccess($this->id);\n        }\n\n        return false;\n    }",
+    "update": "public function update($nullValues = false)\n    {\n        $current_tab = new Tab($this->id);\n        if ($current_tab->id_parent != $this->id_parent) {\n            $this->position = Tab::getNewLastPosition($this->id_parent);\n        }\n\n        self::$_cache_tabs = [];\n\n        return parent::update($nullValues);\n    }",
+    "save": "public function save($nullValues = false, $autoDate = true)\n    {\n        self::$_getIdFromClassName = null;\n\n        return parent::save();\n    }"
+  },
+  "Tag.php": {
+    "delete": "public function delete()\n    {\n        if (!parent::delete()) {\n            return false;\n        }\n\n        Search::removeProductsSearchIndex(array_column($this->getProducts(), 'id_product'));\n\n        return true;\n    }",
+    "add": "public function add($autoDate = true, $nullValues = false)\n    {\n        if (!parent::add($autoDate, $nullValues)) {\n            return false;\n        } elseif (isset($_POST['products'])) {\n            return $this->setProducts(Tools::getValue('products'));\n        }\n\n        return true;\n    }",
+    "update": null,
+    "save": null
+  },
+  "Zone.php": {
+    "delete": "public function delete()\n    {\n        if (parent::delete()) {\n            // Delete regarding delivery preferences\n            $result = Db::getInstance()->delete('carrier_zone', 'id_zone = ' . (int) $this->id);\n            $result = $result && Db::getInstance()->delete('delivery', 'id_zone = ' . (int) $this->id);\n\n            // Update Country & state zone with 0\n            $result = $result && Db::getInstance()->update('country', ['id_zone' => 0], 'id_zone = ' . (int) $this->id);\n\n            return $result && Db::getInstance()->update('state', ['id_zone' => 0], 'id_zone = ' . (int) $this->id);\n        }\n\n        return false;\n    }",
+    "add": null,
+    "update": null,
+    "save": null
+  }
+}

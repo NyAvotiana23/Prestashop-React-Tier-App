@@ -6,7 +6,7 @@ import {
     parseCsvNumber,
     slugify,
     toLanguageNodes,
-} from "./csvImportUtils.js";
+} from "../csvImportUtils.js";
 
 export const PRODUCTS_CSV_FIELD_MAP = {
     "Active (0/1)": "active",
