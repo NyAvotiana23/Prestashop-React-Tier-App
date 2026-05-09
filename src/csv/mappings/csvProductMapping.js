@@ -8,6 +8,8 @@ import {
     toLanguageNodes,
 } from "../csvImportUtils.js";
 
+
+const DEFAULT_STATE = "1";
 export const PRODUCTS_CSV_FIELD_MAP = {
     "Active (0/1)": "active",
     "Name *": "name",
@@ -76,10 +78,9 @@ export function mapProductRowToPayload(row, options = {}) {
     const manufacturerId = isNumericString(row["Manufacturer"]) ? row["Manufacturer"].trim() : "";
 
 
-
-
     const payload = {
         product: {
+            state: DEFAULT_STATE,
             active: parseCsvBoolean(row["Active (0/1)"], "1"),
             name: toLanguageNodes(name, languageIds),
             description_short: toLanguageNodes(row["Summary"], languageIds),

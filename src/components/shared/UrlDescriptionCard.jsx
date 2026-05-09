@@ -2,6 +2,14 @@ import {useEffect, useState} from "react";
 import {getJson} from "../../api/prestashopApi.js";
 import {isAbortError} from "../../utils/util-functions.js";
 
+
+function normalizeApiUrl(value) {
+    if (!value) return "";
+    if (!value.includes("/api/")) return value;
+    const index = value.indexOf("/api/");
+    return value.slice(index + 5);
+}
+
 export default function UrlDescriptionCard({node, url}) {
     const rawUrl = url || node?.["xlink:href"] || "";
     const targetUrl = normalizeApiUrl(rawUrl);
@@ -66,9 +74,4 @@ export default function UrlDescriptionCard({node, url}) {
     );
 }
 
-function normalizeApiUrl(value) {
-    if (!value) return "";
-    if (!value.includes("/api/")) return value;
-    const index = value.indexOf("/api/");
-    return value.slice(index + 5);
-}
+

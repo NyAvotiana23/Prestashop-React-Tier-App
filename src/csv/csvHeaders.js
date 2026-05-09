@@ -72,6 +72,9 @@ export const CUSTOMERS_CSV_HEADERS = [
     "Password",
     "Last Name",
     "First Name",
-    "Email"
+    "Email",
+    "Active (0/1)",
+    "Title ID (Mr = 1, Ms = 2, else 0)",
+    "Groupe ID(Visiteur = 1, Invite = 2, CLient = 3)"
 ];
 

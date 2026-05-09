@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState} from "react";
+import React, {useEffect, useMemo, useState} from "react";
 import {Link, useParams} from "react-router-dom";
 import Loading from "../shared/Loading.jsx";
 import StatusBanner from "../shared/StatusBanner.jsx";
@@ -131,34 +131,24 @@ export default function ProductDetail() {
                 <div className="rounded border border-gray-200 bg-white p-6 shadow-sm">
                     <h2 className="text-lg font-semibold text-gray-900">Linked resources</h2>
                     <div className="mt-4 divide-y divide-gray-100">
-                        {fields.map((field) => {
-                            const displayValue = formatValue(field.value);
-                            const canOpen = field.link && field.value?.["xlink:href"];
+                        <div>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedResource(product?.id_default_image)}
+                                className="rounded bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-200"
 
-                            return (
-                                <div key={field.label} className="grid grid-cols-1 gap-2 py-3 md:grid-cols-3">
-                                    <div className="text-xs font-semibold uppercase text-gray-500">
-                                        {field.label}
-                                    </div>
-                                    <div className="md:col-span-2">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <span className="break-all text-sm text-gray-800">
-                                                {displayValue || "—"}
-                                            </span>
-                                            {canOpen && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setSelectedResource(field.value)}
-                                                    className="rounded bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-200"
-                                                >
-                                                    Open
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
+                            >
+                                Open default image : {getScalarValue(product?.id_default_image)}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedResource(product?.id_default_combination)}
+                                className="rounded bg-gray-100 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-200"
+
+                            >
+                                Open default combination : {getScalarValue(product?.id_default_combination)}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

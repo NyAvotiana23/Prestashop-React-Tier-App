@@ -2,7 +2,7 @@ import {useEffect, useState} from "react";
 import {Link} from "react-router-dom";
 import Loading from "../shared/Loading.jsx";
 import StatusBanner from "../shared/StatusBanner.jsx";
-import {getList} from "../../api/prestashopCrud.js";
+import {deleteResource, getList} from "../../api/prestashopCrud.js";
 import {ensureArray, getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
 
 // Fix #3: getJson (via prestashopApi) already strips the <prestashop> wrapper,
@@ -21,6 +21,15 @@ export default function Products() {
     const [error, setError] = useState(null);
     const [successMessage, setSuccessMessage] = useState("");
 
+    const [deletedId, setDeletedId] = useState(null);
+
+    async function handleDeleteProduct(e, productId) {
+        if (!window.confirm(`Delete product : ${productId}`)) return;
+        await deleteResource("products", productId);
+        setDeletedId(productId);
+
+    }
+
     useEffect(() => {
         const controller = new AbortController();
 
@@ -29,6 +38,7 @@ export default function Products() {
                 setStatus("loading");
                 setError(null);
                 setSuccessMessage("");
+
 
                 const response = await getList("products", {
                     display: "full",
@@ -60,7 +70,7 @@ export default function Products() {
 
         loadProducts();
         return () => controller.abort();
-    }, []);
+    }, [deletedId]);
 
     if (status === "loading") return <Loading>products</Loading>;
 
@@ -94,6 +104,9 @@ export default function Products() {
                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">ID</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Name</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Reference</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Manufacturer
+                            name
+                        </th>
                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Description</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Price</th>
                         <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
@@ -109,12 +122,14 @@ export default function Products() {
                         const active = String(getScalarValue(product?.active)) === "1";
                         const description = getLanguageText(product?.description) || "Untitled description";
                         const reference = getScalarValue(product?.reference) || "—";
+                        const manufacturerName = getScalarValue(product?.manufacturer_name) || "—";
 
                         return (
                             <tr key={id} className="hover:bg-gray-50">
                                 <td className="px-4 py-3 font-mono text-xs text-gray-400">{id}</td>
                                 <td className="max-w-[260px] truncate px-4 py-3 font-medium text-gray-900">{name}</td>
                                 <td className="max-w-[260px] truncate px-4 py-3 font-medium text-gray-900">{reference}</td>
+                                <td className="max-w-[260px] truncate px-4 py-3 font-medium text-gray-900">{manufacturerName}</td>
                                 <td className="max-w-[260px] truncate px-4 py-3 font-medium text-gray-900">
                                     <span dangerouslySetInnerHTML={{__html: description}}/>
                                 </td>
@@ -132,13 +147,18 @@ export default function Products() {
                       </span>
                                     )}
                                 </td>
-                                <td className="px-4 py-3">
+                                <td className="px-4 py-3 space-x-4">
                                     <Link
                                         to={`/catalog/products/${id}`}
-                                        className="inline-flex items-center rounded bg-red-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600"
+                                        className="inline-flex items-center rounded bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-600"
                                     >
                                         View
                                     </Link>
+                                    <button onClick={(e) => handleDeleteProduct(e, id)}
+                                            className="inline-flex items-center rounded bg-red-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600"
+                                    >
+                                        Delete
+                                    </button>
                                 </td>
                             </tr>
                         );

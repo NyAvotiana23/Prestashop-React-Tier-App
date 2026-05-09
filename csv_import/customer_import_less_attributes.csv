@@ -1,2 +1,2 @@
-id;Password;Last Name;First Name;Email
-1;testuser01;Test User;User First Name;test.user@gmail.com
+id;Password;Last Name;First Name;Email;Active (0/1);Title ID (Mr = 1, Ms = 2, else 0);Groupe ID(Visiteur = 1, Invite = 2, CLient = 3)
+1;testuser01;Test User;User First Name;test.user@gmail.com;1;2;2/3

@@ -9,233 +9,570 @@
     "delete": "Complex delete logic:\n1. Resets customer address cache if linked to a customer.\n2. Unlinks from non-ordered carts.\n3. If address is used in any Order → softDelete() (keeps data for order history).\n4. If not used → hard parent::delete().\nImportant for webservice: Deleting an address used in orders only marks it as deleted.",
     "add": "parent::add() + resets customer address cache + updates internal $addressExists cache.",
     "update": "Clears country/zone caches + updates address cache + if address is used in order, temporarily removes required field validation.",
-    "save": "Uses default ObjectModel::save()"
+    "save": "Uses default ObjectModel::save()."
   },
   "AddressFormat.php": {
-    "delete": "Default ObjectModel behavior.",
-    "add": "Default ObjectModel behavior.",
-    "update": "Default ObjectModel behavior.",
-    "save": "Default ObjectModel behavior."
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
   },
   "Alias.php": {
     "delete": "parent::delete() + updates global configuration PS_ALIAS_FEATURE_ACTIVE.",
     "add": "Normalizes alias/search (removes accents) + parent::add() + enables PS_ALIAS_FEATURE_ACTIVE.",
-    "update": "Default ObjectModel behavior.",
-    "save": "Default"
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
   },
   "Attachment.php": {
     "delete": "Deletes physical file + removes product_attachment links + updates product attachment cache.",
     "add": "Sets file_size from physical file before parent::add().",
     "update": "Updates file_size before parent::update().",
-    "save": "Default"
+    "save": "Uses default ObjectModel::save()."
   },
   "AttributeGroup.php": {
     "delete": "Deletes linked attributes + cleans product combinations + cleans positions. Executes hooks.",
     "add": "Sets is_color_group + auto position + parent::add() + hook actionAttributeGroupSave.",
     "update": "Updates is_color_group + hook actionAttributeGroupSave.",
-    "save": "Default"
+    "save": "Uses default ObjectModel::save()."
   },
   "Carrier.php": {
     "delete": "If used in orders → softDelete(). Else hard delete + cleans positions, module links, tax rules.",
     "add": "Auto position + parent::add() + sets default carrier if first + creates id_reference + links to all payment modules.",
-    "update": "Default ObjectModel behavior.",
-    "save": "Default"
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
   },
   "Cart.php": {
     "delete": "Prevents deletion if linked to an Order. Cleans customized files, customizations, cart rules and products.",
     "add": "Sets default lang/shop if missing + parent::add() + actionCartSave hook.",
     "update": "Clears product/weight cache + parent::update() + actionCartSave hook.",
-    "save": "Default"
+    "save": "Uses default ObjectModel::save()."
   },
   "CartRule.php": {
     "delete": "parent::delete() + disables feature flag if no more rules + cleans all associations (cart, carrier, shop, group, country, combinations, etc.).",
     "add": "Sets default reduction_currency + parent::add() + enables feature flag.",
     "update": "Clears cache + sets default currency + parent::update() + updates feature flag.",
-    "save": "Default"
+    "save": "Uses default ObjectModel::save()."
   },
   "Category.php": {
     "delete": "Prevents root category deletion. Deletes all children + cleans associations, images, groups, cart rules + regenerates nested tree (ntree).",
     "add": "Calculates level_depth + sets root if needed + parent::add() + adds positions in all shops + regenerates ntree + updates groups.",
     "update": "Prevents self-parent + updates level_depth/positions + regenerates ntree if parent changed.",
-    "save": "Default"
+    "save": "Uses default ObjectModel::save()."
   },
   "CMS.php": {
     "delete": "parent::delete() + cleans positions in its category.",
     "add": "Sets position + parent::add().",
     "update": "parent::update() + cleans positions.",
-    "save": "Default"
+    "save": "Uses default ObjectModel::save()."
   },
   "CMSCategory.php": {
     "delete": "Prevents deletion of ID 1. Deletes children recursively + cleans positions.",
     "add": "Sets position + level_depth + parent::add() + cleans positions.",
     "update": "Recalculates level_depth.",
-    "save": "Default"
+    "save": "Uses default ObjectModel::save()."
   },
   "CMSRole.php": {
-    "delete": "Default",
-    "add": "Default",
-    "update": "Default",
-    "save": "Default"
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
   },
   "Combination.php": {
     "delete": "Removes stock, specific prices, cart links, supplier/pack links + updates default attribute + clears color cache.",
     "add": "Handles default_on + creates stock_available entry + applies specific price rules + updates default attribute.",
     "update": "Handles default_on + updates default attribute.",
-    "save": "Default"
+    "save": "Uses default ObjectModel::save()."
   },
   "Configuration.php": {
-    "delete": "Default",
-    "add": "Default",
-    "update": "Default",
-    "save": "Default"
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
   },
-  "Connection.php": { "delete": "Default", "add": "Default", "update": "Default", "save": "Default" },
-  "ConnectionsSource.php": { "delete": "Default", "add": "Default", "update": "Default", "save": "Default" },
-  "Contact.php": { "delete": "Default", "add": "Default", "update": "Default", "save": "Default" },
+  "Connection.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "ConnectionsSource.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "Contact.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
   "Country.php": {
     "delete": "parent::delete() + removes cart_rule_country links.",
     "add": "parent::add() + adds module restrictions.",
-    "update": "Default",
-    "save": "Default"
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
   },
   "Currency.php": {
     "delete": "Prevents deletion of default currency. Updates default if needed + softDelete() + removes module restrictions.",
     "add": "Validates conversion_rate + prevents duplicate ISO.",
     "update": "Validates conversion_rate.",
-    "save": "Default"
+    "save": "Uses default ObjectModel::save()."
   },
   "Customer.php": {
     "delete": "Cleans addresses (if no orders), groups, messages, specific prices, carts (without orders), threads, cart rules.",
     "add": "Sets shop/lang defaults, secure_key, birthday, default group, newsletter date + parent::add() + updates groups.",
-    "update": "Default (partial in file)",
-    "save": "Default"
+    "update": "Handles birthday, newsletter date, group updates, marks addresses deleted if customer deleted.",
+    "save": "Uses default ObjectModel::save()."
   },
-  "FeatureFlag.php": { "delete": "Default", "add": "Default", "update": "Default", "save": "Default" },
+  "CustomerMessage.php": {
+    "delete": "Deletes associated file if present + parent::delete().",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "CustomerSession.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "CustomerThread.php": {
+    "delete": "Deletes all associated CustomerMessage entries + parent::delete().",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "Customization.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "CustomizationField.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "DateRange.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "Delivery.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "Employee.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Sets last_passwd_gen + updates text direction + parent::add().",
+    "update": "Fills empty stats dates + updates text direction + parent::update().",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "EmployeeSession.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "Feature.php": {
+    "delete": "Deletes related feature values, feature products + reinitializes positions + hook actionFeatureDelete.",
+    "add": "Auto position + parent::add() + hook actionFeatureSave.",
+    "update": "Custom update for lang fields + parent::update() + hook actionFeatureSave.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "FeatureFlag.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
   "FeatureValue.php": {
-    "delete": "Deletes linked feature_product entries + hook.",
+    "delete": "Deletes linked feature_product entries + hook actionFeatureValueDelete.",
     "add": "parent::add() + hook actionFeatureValueSave.",
-    "update": "parent::update() + hook.",
-    "save": "Default"
+    "update": "parent::update() + hook actionFeatureValueSave.",
+    "save": "Uses default ObjectModel::save()."
   },
-  "Gender.php": { "delete": "Default", "add": "Default", "update": "Default", "save": "Default" },
+  "Gender.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
   "Group.php": {
     "delete": "Prevents deletion of default customer group. Cleans many associations + reassigns customers to default group.",
     "add": "Enables group feature + assigns to home category + all carriers.",
     "update": "Enables feature if reduction > 0.",
-    "save": "Default"
+    "save": "Uses default ObjectModel::save()."
   },
   "GroupReduction.php": {
     "delete": "Cleans product_group_reduction_cache.",
-    "add": "parent::add() + cache.",
-    "update": "parent::update() + cache.",
-    "save": "Default"
+    "add": "parent::add() + updates cache.",
+    "update": "parent::update() + updates cache.",
+    "save": "Uses default ObjectModel::save()."
   },
-  "Guest.php": { "delete": "Default", "add": "Default", "update": "Default", "save": "Default" },
+  "Guest.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
   "Hook.php": {
-    "add": "Clears hook cache.",
-    "delete": "Default",
-    "update": "Default",
-    "save": "Default"
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Clears hook caches.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
   },
   "Image.php": {
     "delete": "parent::delete() + deletes physical images/thumbnails + updates positions.",
     "add": "Auto position + handles cover flag.",
     "update": "Handles cover flag.",
-    "save": "Default"
+    "save": "Uses default ObjectModel::save()."
   },
-  "ImageType.php": { "delete": "Default", "add": "Default", "update": "Default", "save": "Default" },
+  "ImageType.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
   "Language.php": {
     "delete": "Very heavy: deletes all _lang entries, tags, search words, mail/theme/module translation files, images.",
     "add": "parent::add() + generates RTL stylesheets if needed + loads update SQL.",
     "update": "Regenerates RTL if changed.",
-    "save": "Default"
+    "save": "Uses default ObjectModel::save()."
   },
-  "Mail.php": { "delete": "Default", "add": "Default", "update": "Default", "save": "Default" },
+  "Mail.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
   "Manufacturer.php": {
     "delete": "Deletes linked address + parent::delete() + cleans cart rules + deletes image.",
-    "add": "Default",
-    "update": "Default",
-    "save": "Default"
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
   },
-  "Message.php": { "delete": "Default", "add": "Default", "update": "Default", "save": "Default" },
+  "Message.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
   "Meta.php": {
     "delete": "parent::delete() + regenerates .htaccess.",
-    "add": "Default",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
     "update": "parent::update() + regenerates .htaccess.",
-    "save": "Default"
+    "save": "Uses default ObjectModel::save()."
   },
-  "Page.php": { "delete": "Default", "add": "Default", "update": "Default", "save": "Default" },
-  "PrestaShopLogger.php": { "delete": "Default", "add": "Default", "update": "Default", "save": "Default" },
+  "Order.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "parent::add() + deletes specific prices linked to the cart.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "OrderCarrier.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "OrderCartRule.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "OrderDetail.php": {
+    "delete": "parent::delete() + deletes order_detail_tax entries.",
+    "add": "Sets original_wholesale_price + validates and resets non-required fields + parent::add().",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "OrderHistory.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "parent::add() + updates order current_state + hook actionOrderHistoryAddAfter.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "OrderInvoice.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Sets shop_address from order's shop + parent::add().",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "OrderMessage.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "OrderPayment.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "parent::add() + hook actionPaymentCCAdd.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "OrderReturn.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "OrderReturnState.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "OrderSlip.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "OrderState.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "Page.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "PrestaShopLogger.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
   "Product.php": {
     "delete": "Heavy safety checks (stock, supply orders). Deletes attributes, images, categories, features, tags, carts, attachments, etc. Executes actionProductDelete hook.",
     "add": "Sets product_type for virtual + stock management + group reduction + unit ratio + hook.",
     "update": "Syncs stock reference/EAN/etc. + hooks actionProductSave/Update.",
-    "save": "Default"
+    "save": "Uses default ObjectModel::save()."
   },
   "ProductAttribute.php": {
     "delete": "Deletes combinations + cleans cart rules + positions.",
     "add": "Auto position + hook.",
     "update": "Hook.",
-    "save": "Default"
+    "save": "Uses default ObjectModel::save()."
   },
   "ProductDownload.php": {
     "delete": "Optional file deletion.",
     "add": "parent::add()",
     "update": "parent::update()",
-    "save": "Default"
+    "save": "Uses default ObjectModel::save()."
   },
-  "ProductSupplier.php": { "delete": "Default", "add": "Default", "update": "Default", "save": "Default" },
+  "ProductSupplier.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
   "Profile.php": {
     "delete": "Deletes access + module_access entries.",
     "add": "parent::add()",
-    "update": "Default",
-    "save": "Default"
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
   },
-  "QuickAccess.php": { "delete": "Default", "add": "Default", "update": "Default", "save": "Default" },
-  "RequestSql.php": { "delete": "Default", "add": "Default", "update": "Default", "save": "Default" },
-  "Risk.php": { "delete": "Default", "add": "Default", "update": "Default", "save": "Default" },
-  "SearchEngine.php": { "delete": "Default", "add": "Default", "update": "Default", "save": "Default" },
+  "QuickAccess.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "RangePrice.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "parent::add() + creates delivery prices for all carrier zones.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "RangeWeight.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "parent::add() + creates delivery prices for all carrier zones.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "RequestSql.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "Risk.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "SearchEngine.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "Shop.php": {
+    "delete": "Checks dependencies, deletes all associated shop data (stock, urls, module restrictions, etc.).",
+    "add": "Resets static cache + caches shops.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "ShopGroup.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "ShopUrl.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
   "SpecificPrice.php": {
     "delete": "Flushes cache + updates feature flag.",
     "add": "Flushes cache + enables feature flag.",
     "update": "Flushes cache.",
-    "save": "Default"
+    "save": "Uses default ObjectModel::save()."
   },
   "SpecificPriceRule.php": {
     "delete": "Deletes conditions + linked specific prices.",
-    "add": "Default",
-    "update": "Default",
-    "save": "Default"
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
   },
   "State.php": {
     "delete": "Only if not used.",
-    "add": "Default",
-    "update": "Default",
-    "save": "Default"
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
   },
-  "Store.php": { "delete": "Default", "add": "Default", "update": "Default", "save": "Default" },
+  "Stock.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Fetches product informations before parent::add().",
+    "update": "Fetches product informations before parent::update().",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "StockAvailable.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "parent::add() + postSave().",
+    "update": "parent::update() + postSave().",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "StockMvt.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "StockMvtReason.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "StockMvtWS.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "Store.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
   "Supplier.php": {
     "delete": "Deletes address + image + cleans cart rules.",
-    "add": "Default",
-    "update": "Default",
-    "save": "Default"
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "SupplyOrder.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Calculates prices + parent::add() + adds history if not template.",
+    "update": "Calculates prices + parent::update() + adds history if not template.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "SupplyOrderDetail.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Calculates prices + parent::add().",
+    "update": "Calculates prices + parent::update().",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "SupplyOrderHistory.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "SupplyOrderReceiptHistory.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "SupplyOrderState.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
   },
   "Tab.php": {
     "delete": "Deletes authorization roles + cleans positions.",
     "add": "Sets position + creates access + clears cache.",
     "update": "Adjusts position if parent changes + clears cache.",
-    "save": "Clears cache."
+    "save": "Clears cache (Tab::save)."
   },
   "Tag.php": {
     "delete": "Removes products search index.",
     "add": "parent::add() + optional setProducts().",
-    "update": "Default",
-    "save": "Default"
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "Tax.php": {
+    "delete": "If used → historize, else parent::delete. Also cleans tax_rule associations.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "If not deleted and used, historize and create new tax, update tax_rule references.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "TaxRule.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "TaxRulesGroup.php": {
+    "delete": "Deletes associated tax_rule entries.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "If not deleted and used, duplicata object and historize.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "Warehouse.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
+  },
+  "WarehouseProductLocation.php": {
+    "delete": "Uses default ObjectModel::delete(). No specific business logic.",
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
   },
   "Zone.php": {
     "delete": "Cleans carrier_zone, delivery + resets country/state zones.",
-    "add": "Default",
-    "update": "Default",
-    "save": "Default"
+    "add": "Uses default ObjectModel::add(). No specific business logic.",
+    "update": "Uses default ObjectModel::update(). No specific business logic.",
+    "save": "Uses default ObjectModel::save()."
   }
 }
