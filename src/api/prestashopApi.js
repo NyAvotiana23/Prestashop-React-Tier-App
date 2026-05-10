@@ -1,6 +1,11 @@
 import axios from "axios";
 import {XMLBuilder, XMLParser} from "fast-xml-parser";
 import {cleanPrestashopJson} from "../utils/util-functions.js";
+import {
+    buildApiErrorPayload,
+    buildApiSuccessPayload,
+    emitApiResponse,
+} from "./api-response-handler";
 
 const baseUrl = import.meta.env.VITE_PRESTASHOP_API_URL;
 const apiKey = import.meta.env.VITE_PRESTASHOP_API_KEY;
@@ -43,6 +48,43 @@ const client = axios.create({
         Authorization: authHeader, Accept: "application/xml",
     }, timeout: 20000,
 });
+
+export function buildFullUrl(endpoint, params) {
+    if (!endpoint) return null;
+
+    const normalizedEndpoint = String(endpoint).replace(/^\/+/, "");
+    const normalizedBase = baseUrl ? String(baseUrl).replace(/\/+$/, "") : "";
+    const combined = normalizedBase ? `${normalizedBase}/${normalizedEndpoint}` : normalizedEndpoint;
+
+    let url;
+    try {
+        if (/^https?:\/\//i.test(combined)) {
+            url = new URL(combined);
+        } else if (typeof window !== "undefined" && window.location?.origin) {
+            url = new URL(combined, window.location.origin);
+        } else {
+            url = new URL(combined, "http://localhost");
+        }
+    } catch {
+        return combined;
+    }
+
+    if (params && typeof params === "object") {
+        const search = new URLSearchParams();
+        Object.entries(params).forEach(([key, value]) => {
+            if (value === undefined || value === null) return;
+            if (Array.isArray(value)) {
+                value.forEach((item) => search.append(key, String(item)));
+            } else {
+                search.append(key, String(value));
+            }
+        });
+        const query = search.toString();
+        if (query) url.search = query;
+    }
+
+    return url.toString();
+}
 
 function ensurePrestashopRoot(payload) {
     if (!payload || typeof payload !== "object") {
@@ -119,6 +161,7 @@ export async function getJson(endpoint, options = {}) {
     // responseType (or any other stray key) cannot silently override "text"
     // and break XML parsing downstream.
     const {params, headers, signal} = options;
+    const fullUrl = buildFullUrl(endpoint, params);
 
     try {
         const response = await prestashopRequest({
@@ -129,8 +172,19 @@ export async function getJson(endpoint, options = {}) {
         const parsed = parseXml(rawXml);
         const data = cleanPrestashopJson(parsed);
 
+        emitApiResponse(
+            buildApiSuccessPayload({
+                method: "GET",
+                endpoint,
+                status: response?.status,
+                statusText: response?.statusText,
+                fullUrl,
+            })
+        );
+
         return {...response, data, rawXml};
     } catch (err) {
+        emitApiResponse(buildApiErrorPayload({error: err, method: "GET", endpoint, fullUrl}));
         throw new Error(formatPrestashopError(err, "GET", endpoint));
     }
 }
@@ -138,6 +192,7 @@ export async function getJson(endpoint, options = {}) {
 export async function sendJson(method, endpoint, payload, options = {}) {
     // Fix #4: same explicit destructuring — responseType is always "text" here.
     const {params, headers, signal} = options;
+    const fullUrl = buildFullUrl(endpoint, params);
 
     try {
         const xml = buildXml(payload);
@@ -149,8 +204,19 @@ export async function sendJson(method, endpoint, payload, options = {}) {
         const parsed = parseXml(rawXml);
         const data = cleanPrestashopJson(parsed);
 
+        emitApiResponse(
+            buildApiSuccessPayload({
+                method,
+                endpoint,
+                status: response?.status,
+                statusText: response?.statusText,
+                fullUrl,
+            })
+        );
+
         return {...response, data, rawXml};
     } catch (err) {
+        emitApiResponse(buildApiErrorPayload({error: err, method, endpoint, fullUrl}));
         throw new Error(formatPrestashopError(err, method, endpoint));
     }
 }

@@ -6,7 +6,7 @@ This document describes how CSV files are parsed and transformed before being se
 
 - Config: `src/csv/csvImportConfig.js`
 - Headers: `src/csv/csvHeaders.js`
-- Mapping: `src/csv/csvProductMapping.js`
+- Mapping: `src/csv/mappings/csvProductMapping.js`, `src/csv/mappings/csvOrderMapping.js`
 - Import runner: `src/csv/csvImporter.js`
 - UI: `src/pages/ImportDatabase.jsx`, `src/csv/CsvUploader.jsx`, `src/csv/CsvTemplateHolder.jsx`
 
@@ -77,7 +77,43 @@ Auto defaults:
 Not mapped yet (kept for future):
 - Images, tags, feature values, accessories, advanced stock fields.
 
-## 4) Import flow (UI)
+## 4) Orders CSV header (required fields only)
+
+Required order fields:
+- `id_address_delivery`
+- `id_address_invoice`
+- `id_cart`
+- `id_currency`
+- `id_lang`
+- `id_customer`
+- `id_carrier`
+- `module`
+- `payment`
+- `total_paid`
+- `total_paid_real`
+- `total_products`
+- `total_products_wt`
+- `conversion_rate`
+- `order_details`
+
+`order_details` format:
+- A single CSV cell containing multiple JSON objects separated by `;`.
+- Each JSON object maps to an `order_row` and must include:
+  - `product_name`
+  - `product_quantity`
+  - `product_price`
+
+Supported optional keys inside each JSON object:
+- `product_id`, `product_attribute_id`, `product_reference`, `product_ean13`, `product_isbn`, `product_upc`
+- `id_customization`, `unit_price_tax_incl`, `unit_price_tax_excl`
+
+Example value (wrap the whole cell in quotes):
+
+```csv
+{"product_id":1,"product_quantity":2,"product_name":"T-shirt","product_price":50.00}; {"product_id":2,"product_quantity":1,"product_name":"Cap","product_price":20.00}
+```
+
+## 5) Import flow (UI)
 
 1. Go to `/import-database`.
 2. Select delimiter and decimal separator for each resource row.
@@ -89,7 +125,7 @@ Not mapped yet (kept for future):
 Preview:
 - The "Charger donnees" button fetches a sample list (`limit: 0,5`) for each checked resource.
 
-## 5) Import flow (code)
+## 6) Import flow (code)
 
 1. CSV is parsed with PapaParse (headers + rows).
 2. Each row is mapped to a PrestaShop JSON payload.
@@ -99,7 +135,7 @@ Preview:
 Decimal handling:
 - Numeric fields are normalized using the selected decimal separator.
 
-## 6) Demo (local)
+## 7) Demo (local)
 
 The demo parses the first row and prints the payload:
 

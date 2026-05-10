@@ -1,0 +1,2 @@
+id_address_delivery;id_address_invoice;id_cart;id_currency;id_lang;id_customer;id_carrier;module;payment;total_paid;total_paid_real;total_products;total_products_wt;conversion_rate;order_details
+4;4;12;1;1;3;2;ps_checkpayment;Check;120.00;120.00;100.00;120.00;1;"{\"product_id\":1,\"product_quantity\":2,\"product_name\":\"T-shirt\",\"product_price\":50.00,\"unit_price_tax_incl\":60.00,\"unit_price_tax_excl\":50.00}; {\"product_id\":2,\"product_quantity\":1,\"product_name\":\"Cap\",\"product_price\":20.00,\"unit_price_tax_incl\":24.00,\"unit_price_tax_excl\":20.00}"

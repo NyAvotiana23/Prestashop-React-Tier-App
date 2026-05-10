@@ -1,4 +1,9 @@
-import {getJson, prestashopRequest, sendJson} from "./prestashopApi";
+import {getJson, prestashopRequest, sendJson, buildFullUrl} from "./prestashopApi";
+import {
+    buildApiErrorPayload,
+    buildApiSuccessPayload,
+    emitApiResponse,
+} from "./api-response-handler";
 
 function normalizeRef(ref) {
     if (!ref || typeof ref !== "string") {
@@ -133,13 +138,40 @@ export async function deleteResource(ref, id, options = {}) {
         throw new Error("id is required for deleteResource");
     }
 
-    return await prestashopRequest({
-        method: "DELETE",
-        endpoint: `${normalizedRef}/${id}`,
-        params: options.params,
-        headers: options.headers,
-        signal: options.signal,
-    });
+    const endpoint = `${normalizedRef}/${id}`;
+    const fullUrl = buildFullUrl(endpoint, options.params);
+
+    try {
+        const response = await prestashopRequest({
+            method: "DELETE",
+            endpoint,
+            params: options.params,
+            headers: options.headers,
+            signal: options.signal,
+        });
+
+        emitApiResponse(
+            buildApiSuccessPayload({
+                method: "DELETE",
+                endpoint,
+                status: response?.status,
+                statusText: response?.statusText,
+                fullUrl,
+            })
+        );
+
+        return response;
+    } catch (err) {
+        emitApiResponse(
+            buildApiErrorPayload({
+                error: err,
+                method: "DELETE",
+                endpoint,
+                fullUrl,
+            })
+        );
+        throw err;
+    }
 }
 
 // Fix #7: pass only list-relevant options to getList, not the whole options

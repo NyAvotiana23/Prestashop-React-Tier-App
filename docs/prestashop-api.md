@@ -108,7 +108,31 @@ await deleteResource("products", ids[0]);
 const report = await resetDatabase(["products", "orders"]);
 ```
 
-## 5) Notes and troubleshooting
+## 5) Global API response handler
+
+The app emits a normalized success/error payload for every API call and shows it in a banner in the root layout.
+
+- Handler: `src/api/api-response-handler.js`
+- UI: `src/layouts/RootLayout.jsx` + `src/components/shared/StatusBanner.jsx`
+
+Example payload (simplified):
+
+```js
+{
+  ok: false,
+  status: 404,
+  method: "GET",
+  endpoint: "orders/9999",
+  fullUrl: "https://example.com/api/orders/9999",
+  title: "API: erreur 404",
+  message: "PrestaShop GET orders/9999 failed: 404 Not Found",
+  details: ["Ressource: orders.", "ID: 9999.", "Ressource ou identifiant introuvable."]
+}
+```
+
+The handler also parses PrestaShop XML errors (`<errors><error>...</error></errors>`) and appends them to `details`.
+
+## 6) Notes and troubleshooting
 
 - If requests fail with 401/403, check the API key permissions in Prestashop.
 - If you see CORS errors, configure your Prestashop server to allow requests from your frontend origin.
@@ -116,7 +140,7 @@ const report = await resetDatabase(["products", "orders"]);
 - `getJson`/`sendJson` return a cleaned object in `response.data` and keep the raw XML in `response.rawXml` if you need it.
 - `sendJson` wraps payloads in a `<prestashop>` root automatically.
 
-## 6) CSV import
+## 7) CSV import
 
 The CSV importer builds JSON payloads and submits them through `createResource`.
 The product mapping lives in `src/csv/csvProductMapping.js` and is documented in `docs/csv-import.md`.

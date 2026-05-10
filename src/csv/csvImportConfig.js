@@ -1,6 +1,7 @@
-import {CUSTOMERS_CSV_HEADERS, PRODUCTS_CSV_HEADERS} from "./csvHeaders.js";
+import {CUSTOMERS_CSV_HEADERS, PRODUCTS_CSV_HEADERS, ORDERS_CSV_HEADERS} from "./csvHeaders.js";
 import {mapProductRowToPayload} from "./mappings/csvProductMapping.js";
 import {mapCustomerRowToPayload} from "./mappings/csvCustomerMapping.js";
+import {mapOrderRowToPayload} from "./mappings/csvOrderMapping.js";
 
 export const CSV_IMPORT_CONFIGS = {
     products: {
@@ -17,5 +18,11 @@ export const CSV_IMPORT_CONFIGS = {
         languageIds: ["1"],
         defaultCategoryId: "1",
     },
+    orders: {
+        ref: "orders",
+        csvHeaders: ORDERS_CSV_HEADERS,
+        mapRowToPayload: mapOrderRowToPayload,
+        languageIds: ["1"],
+        defaultCategoryId: "1",
+    },
 };
-

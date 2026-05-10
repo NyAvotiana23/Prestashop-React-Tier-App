@@ -78,3 +78,20 @@ export const CUSTOMERS_CSV_HEADERS = [
     "Groupe ID(Visiteur = 1, Invite = 2, CLient = 3)"
 ];
 
+export const ORDERS_CSV_HEADERS = [
+    "id_address_delivery",
+    "id_address_invoice",
+    "id_cart",
+    "id_currency",
+    "id_lang",
+    "id_customer",
+    "id_carrier",
+    "module",
+    "payment",
+    "total_paid",
+    "total_paid_real",
+    "total_products",
+    "total_products_wt",
+    "conversion_rate",
+    "order_details",
+];

@@ -36,9 +36,10 @@ This document lists the main folders and files with a short description of their
 
 - `src/api/prestashopApi.js`: low-level XML/JSON request layer.
 - `src/api/prestashopCrud.js`: convenience CRUD helpers (list, get, create, update, delete, reset).
+- `src/api/api-response-handler.js`: gestionnaire global des succes/erreurs API.
 - `src/router/router.jsx`: root router configuration.
 - `src/router/catalogue-router.jsx`: catalogue-related routes (`/catalog/products`).
-- `src/router/commande-router.jsx`: currently mirrors catalogue routes.
+- `src/router/order-router.jsx`: currently mirrors catalogue routes.
 - `src/components/shared/Header.jsx`: global header UI.
 - `src/components/shared/Sidebar.jsx`: navigation sidebar.
 - `src/components/shared/Footer.jsx`: global footer UI.
@@ -53,6 +54,7 @@ This document lists the main folders and files with a short description of their
 - `src/csv/CsvUploader.jsx`: CSV file picker used in import UI.
 - `src/csv/CsvTemplateHolder.jsx`: template CSV downloader.
 - `src/csv/csvProductMapping.js`: products CSV row -> payload mapping.
+- `docs/api-response-handler.md`: documentation du banner global API.
 - `scripts/csv-import-demo.mjs`: local demo to preview a product payload.
 
 ## Tree snapshot (main paths)
