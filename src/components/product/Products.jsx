@@ -149,7 +149,7 @@ export default function Products() {
                                 </td>
                                 <td className="px-4 py-3 space-x-4">
                                     <Link
-                                        to={`/catalog/products/${id}`}
+                                        to={`${id}`}
                                         className="inline-flex items-center rounded bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-600"
                                     >
                                         View

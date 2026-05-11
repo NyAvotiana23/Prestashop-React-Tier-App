@@ -126,7 +126,7 @@ function Customers() {
                                 </td>
                                 <td className="px-4 py-3">
                                     <Link
-                                        to={`/customers/${id}`}
+                                        to={`${id}`}
                                         className="inline-flex items-center rounded bg-red-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600"
                                     >
                                         View

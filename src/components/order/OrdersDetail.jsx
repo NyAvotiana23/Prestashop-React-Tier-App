@@ -360,7 +360,7 @@ export default function OrdersDetail() {
     return (
         <section className="space-y-6">
             <Link
-                to="/orders"
+                to="/admin/orders"
                 className="inline-flex items-center text-sm font-semibold text-red-600 hover:text-red-700"
             >
                 Back to orders

@@ -1,6 +1,8 @@
 import {Link} from "react-router-dom";
+import useAdminUser from "../../hooks/useAdminUser.jsx";
 
 function Header() {
+    const {adminUser, logout} = useAdminUser();
 
     return (
         <header className="border-b border-zinc-800 bg-zinc-950/95">
@@ -13,16 +15,35 @@ function Header() {
                         Prestashop React Tier App
                     </h1>
                 </div>
-                <div className="flex flex-row gap-6">
+                <div className="flex flex-row items-center gap-4">
+                    {adminUser ? (
+                        <>
+                            <span className="text-xs text-zinc-400">Admin: {adminUser.username}</span>
+                            <button
+                                type="button"
+                                onClick={logout}
+                                className="rounded-full border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-200 hover:bg-zinc-800"
+                            >
+                                Se deconnecter
+                            </button>
+                        </>
+                    ) : (
+                        <Link
+                            to="/admin/login"
+                            className="rounded-full border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-200 hover:bg-zinc-800"
+                        >
+                            Se connecter
+                        </Link>
+                    )}
 
                     <Link
-                        to="/reset-database"
+                        to="/admin/reset-database"
                         className="inline-flex items-center gap-2 rounded-full border border-yellow-400/70 bg-yellow-400/10 px-4 py-2 text-sm font-semibold text-yellow-300 transition hover:bg-yellow-400/20"
                     >
                         Reset Database
                     </Link>
                     <Link
-                        to="/import-database"
+                        to="/admin/import-database"
                         className="inline-flex items-center gap-2 rounded-full border border-yellow-400/70 bg-yellow-400/10 px-4 py-2 text-sm font-semibold text-yellow-300 transition hover:bg-yellow-400/20"
                     >
                         Import data

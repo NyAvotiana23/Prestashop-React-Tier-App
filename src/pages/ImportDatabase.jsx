@@ -1,36 +1,54 @@
-import React, {useState} from 'react';
+import {useState} from 'react';
 import {API_URLS} from "../constants/apiData.js";
-import {getList} from "../api/prestashopCrud.js";
 import CsvUploader from "../csv/CsvUploader.jsx";
 import CsvTemplateHolder from "../csv/CsvTemplateHolder.jsx";
 import {CSV_IMPORT_CONFIGS} from "../csv/csvImportConfig.js";
 import {importCsvResource} from "../csv/csvImporter.js";
+import {parseCsvText} from "../csv/csvImportUtils.js";
 
-function ImportDatabase(props) {
+function ImportDatabase() {
+    const importRefs = ["products", "combinations", "orders"];
+    const apiByRef = Object.fromEntries(API_URLS.map((api) => [api.ref, api]));
+    const importApis = importRefs.map((ref) => apiByRef[ref]).filter(Boolean);
+
     const [checkedItems, setCheckedItems] = useState(
-        Object.fromEntries(API_URLS.map(api => [api.ref, api.deletable !== false]))
+        Object.fromEntries(importApis.map(api => [api.ref, true]))
     );
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [previewResults, setPreviewResults] = useState([]);
-    const [previewError, setPreviewError] = useState(null);
     const [filesByRef, setFilesByRef] = useState({});
+    const [filePreviewByRef, setFilePreviewByRef] = useState({});
     const [importResultsByRef, setImportResultsByRef] = useState({});
     const [importingByRef, setImportingByRef] = useState({});
     const [delimiterByRef, setDelimiterByRef] = useState(
-        Object.fromEntries(API_URLS.map((api) => [api.ref, ";"]))
+        Object.fromEntries(importApis.map((api) => [api.ref, ","]))
     );
     const [decimalByRef, setDecimalByRef] = useState(
-        Object.fromEntries(API_URLS.map((api) => [api.ref, "."]))
+        Object.fromEntries(importApis.map((api) => [api.ref, ","]))
     );
 
     const allChecked = Object.values(checkedItems).every(Boolean);
 
     function handleCheckAll() {
-        setCheckedItems(Object.fromEntries(API_URLS.map(api => [api.ref, !allChecked])));
+        setCheckedItems(Object.fromEntries(importApis.map(api => [api.ref, !allChecked])));
+    }
+
+    function buildFilePreview(text, delimiter) {
+        const parsed = parseCsvText(text, {delimiter});
+        return {
+            headers: parsed.meta?.fields ?? [],
+            rows: (parsed.data ?? []).slice(0, 5),
+            errors: parsed.errors ?? [],
+        };
     }
 
     function handleChangeDelimiter(ref, value) {
         setDelimiterByRef((prev) => ({...prev, [ref]: value}));
+        const existingFile = filesByRef[ref];
+        if (existingFile?.text) {
+            setFilePreviewByRef((prev) => ({
+                ...prev,
+                [ref]: buildFilePreview(existingFile.text, value),
+            }));
+        }
     }
 
     function handleChangeDecimal(ref, value) {
@@ -43,6 +61,10 @@ function ImportDatabase(props) {
 
     function handleFileLoaded(ref, text, name) {
         setFilesByRef((prev) => ({...prev, [ref]: {text, name}}));
+        setFilePreviewByRef((prev) => ({
+            ...prev,
+            [ref]: buildFilePreview(text, delimiterByRef[ref] ?? ","),
+        }));
     }
 
     async function handleImport(ref) {
@@ -87,50 +109,11 @@ function ImportDatabase(props) {
         }
     }
 
-    async function handlePreviewSubmit(e) {
-        e.preventDefault();
-        const refs = Object.keys(checkedItems).filter(ref => checkedItems[ref]);
-        if (refs.length === 0) {
-            alert("Aucune ressource selectionnee.");
-            return;
-        }
-
-        try {
-            setIsSubmitting(true);
-            setPreviewError(null);
-            setPreviewResults([]);
-
-            const results = await Promise.all(
-                refs.map(async (ref) => {
-                    try {
-                        const response = await getList(ref, {limit: "0,5"});
-                        return {ref, ok: true, data: response?.data ?? null};
-                    } catch (error) {
-                        return {ref, ok: false, error};
-                    }
-                })
-            );
-
-            setPreviewResults(results);
-        } catch (error) {
-            console.error(error);
-            setPreviewError(error);
-        } finally {
-            setIsSubmitting(false);
-        }
-    }
 
     return (
         <div className="p-4">
             <h2 className="text-2xl font-bold mb-4">Import Csv Database Page</h2>
-            <form onSubmit={handlePreviewSubmit} className="mb-4">
-                <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className={`p-2 rounded bg-blue-500 text-white hover:bg-blue-600 transition-all duration-300 ${isSubmitting ? "opacity-60 cursor-not-allowed" : ""}`}
-                >
-                    {isSubmitting ? "Chargement..." : "Charger donnees"}
-                </button>
+            <div className="mb-4">
                 <table className="min-w-full bg-white border border-gray-200">
                     <thead>
                     <tr className="bg-gray-100 text-gray-700 uppercase text-sm leading-normal">
@@ -150,7 +133,7 @@ function ImportDatabase(props) {
                     </tr>
                     </thead>
                     <tbody className="text-gray-600 text-sm font-medium">
-                    {API_URLS.map((api, i) =>
+                    {importApis.map((api, i) =>
                         <tr key={i} className="hover:bg-gray-50 transition-all duration-300">
                             <td className="py-3 px-6">{api.name}</td>
                             <td className="py-3 px-6">
@@ -198,6 +181,26 @@ function ImportDatabase(props) {
                                 <div className="text-xs text-gray-500 mt-1">
                                     {filesByRef[api.ref]?.name ?? "Aucun fichier"}
                                 </div>
+                                {filePreviewByRef[api.ref] && (
+                                    <div className="mt-2 text-xs text-gray-600">
+                                        <div className="font-semibold text-gray-800">Apercu fichier</div>
+                                        {filePreviewByRef[api.ref].errors?.length > 0 && (
+                                            <div className="text-red-600">
+                                                Erreurs parse: {filePreviewByRef[api.ref].errors.length}
+                                            </div>
+                                        )}
+                                        <pre className="mt-1 max-h-40 overflow-auto rounded bg-gray-50 p-2">
+                                            {JSON.stringify(
+                                                {
+                                                    headers: filePreviewByRef[api.ref].headers,
+                                                    rows: filePreviewByRef[api.ref].rows,
+                                                },
+                                                null,
+                                                2
+                                            )}
+                                        </pre>
+                                    </div>
+                                )}
                                 {CSV_IMPORT_CONFIGS[api.ref] && (
                                     <button
                                         type="button"
@@ -226,43 +229,9 @@ function ImportDatabase(props) {
                     )}
                     </tbody>
                 </table>
-            </form>
-            {previewError && (
-                <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                    Erreur lors du chargement des donnees: {previewError.message}
-                </div>
-            )}
-            {previewResults.length > 0 && (
-                <div className="rounded border border-gray-200 bg-white p-4">
-                    <h3 className="text-lg font-semibold text-gray-900">Apercu des donnees</h3>
-                    <div className="mt-3 space-y-4 text-sm text-gray-700">
-                        {previewResults.map((item) => (
-                            <div key={item.ref} className="rounded border border-gray-100 p-3">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <span className="font-semibold text-gray-900">{item.ref}</span>
-                                    {item.ok ? (
-                                        <span className="text-green-700">OK</span>
-                                    ) : (
-                                        <span className="text-red-600">Erreur</span>
-                                    )}
-                                </div>
-                                {item.ok ? (
-                                    <pre className="mt-2 max-h-64 overflow-auto rounded bg-gray-50 p-2 text-xs">
-                                        {JSON.stringify(item.data, null, 2)}
-                                    </pre>
-                                ) : (
-                                    <div className="mt-2 text-xs text-red-700">
-                                        {item.error?.message ?? "Erreur inconnue"}
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+            </div>
         </div>
     );
 }
 
 export default ImportDatabase;
-

@@ -109,7 +109,7 @@ function CustomerDetail(props) {
     );
     return (
         <section className="space-y-6">
-            <Link to={"/customers"}
+            <Link to={"/admin/customers"}
                   className={"inline-flex items-center text-sm font-semibold text-red-600 hover:text-red-700"}
             >
                 Back to cutsomers

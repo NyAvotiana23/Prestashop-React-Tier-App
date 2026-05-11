@@ -133,11 +133,14 @@ export function buildXml(payload) {
 }
 
 export async function prestashopRequest({
-                                            method, endpoint, params, xml, headers, responseType = "text", signal,
+                                            method, endpoint, params, xml, data, headers, responseType = "text", signal,
                                         }) {
+    const payload = data ?? xml;
+    const contentType = xml && data === undefined ? "application/xml" : undefined;
+
     const config = {
-        method, url: endpoint, params, data: xml, headers: {
-            "Content-Type": xml ? "application/xml" : undefined, ...headers,
+        method, url: endpoint, params, data: payload, headers: {
+            "Content-Type": contentType, ...headers,
         }, responseType, signal,
     };
 

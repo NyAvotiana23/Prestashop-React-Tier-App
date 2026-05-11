@@ -32,10 +32,25 @@ export function parseCsvBoolean(value, defaultValue = "0") {
   return defaultValue;
 }
 
+export function parseDateToIso(dateValue) {
+    if (!dateValue) return "";
+    const raw = String(dateValue).trim();
+    const parts = raw.split("/");
+    if (parts.length !== 3) return "";
+    const [day, month, year] = parts;
+    if (!day || !month || !year) return "";
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
 export function parseCsvNumber(value, options = {}) {
   if (value === null || value === undefined || value === "") return "";
   const decimalSeparator = options.decimalSeparator ?? ".";
+  const stripPercent = options.stripPercent ?? false;
   let normalized = String(value).trim();
+  if (stripPercent) {
+    normalized = normalized.replace(/%/g, "");
+  }
+  normalized = normalized.replace(/\s/g, "");
   if (decimalSeparator === ",") {
     normalized = normalized.replace(/\./g, "").replace(",", ".");
   }

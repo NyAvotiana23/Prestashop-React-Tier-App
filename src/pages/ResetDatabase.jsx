@@ -2,9 +2,32 @@ import {useState} from 'react';
 import {API_URLS} from "../constants/apiData.js";
 import {resetDatabase} from "../api/prestashopCrud.js";
 
+const RESET_PRIORITY = [
+    {ref: "customers", priority: 0},
+    {ref: "products", priority: 0},
+    {ref: "orders", priority: 1},
+    {ref: "order_details", priority: 1},
+    {ref: "order_carriers", priority: 1},
+    {ref: "order_cart_rules", priority: 1},
+    {ref: "order_histories", priority: 1},
+    {ref: "order_invoices", priority: 1},
+    {ref: "order_payments", priority: 1},
+    {ref: "order_slip", priority: 1},
+    {ref: "combinations", priority: 1},
+    {ref: "carts", priority: 2},
+];
+
 function ResetDatabase() {
+    const apiByRef = Object.fromEntries(API_URLS.map((api) => [api.ref, api]));
+    const resetRefs = RESET_PRIORITY
+        .map((item, index) => ({...item, index}))
+        .sort((a, b) => a.priority - b.priority || a.index - b.index)
+        .map((item) => item.ref)
+        .filter((ref) => apiByRef[ref]);
+    const resetApis = resetRefs.map((ref) => apiByRef[ref]);
+
     const [checkedItems, setCheckedItems] = useState(
-        Object.fromEntries(API_URLS.map(api => [api.ref, api.deletable !== false]))
+        Object.fromEntries(resetApis.map(api => [api.ref, true]))
     );
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [lastReport, setLastReport] = useState(null);
@@ -12,7 +35,7 @@ function ResetDatabase() {
     const allChecked = Object.values(checkedItems).every(Boolean);
 
     function handleCheckAll() {
-        setCheckedItems(Object.fromEntries(API_URLS.map(api => [api.ref, !allChecked])));
+        setCheckedItems(Object.fromEntries(resetApis.map(api => [api.ref, !allChecked])));
     }
 
     function handleCheckItem(ref) {
@@ -38,7 +61,7 @@ function ResetDatabase() {
 
     async function handleDeleteSubmit(e) {
         e.preventDefault();
-        const refs = Object.keys(checkedItems).filter(ref => checkedItems[ref]);
+        const refs = resetRefs.filter(ref => checkedItems[ref]);
         if (refs.length === 0) {
             alert("Aucune ressource selectionnee.");
             return;
@@ -121,7 +144,7 @@ function ResetDatabase() {
                     </tr>
                     </thead>
                     <tbody className="text-gray-600 text-sm font-medium">
-                    {API_URLS.map((api, i) =>
+                    {resetApis.map((api, i) =>
                         <tr key={i} className="hover:bg-gray-50 transition-all duration-300">
                             <td className="py-3 px-6">{api.name}</td>
                             <td className="py-3 px-6">{api.baseUrl}</td>

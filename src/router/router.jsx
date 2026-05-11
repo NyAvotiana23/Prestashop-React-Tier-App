@@ -1,24 +1,68 @@
 import {createBrowserRouter} from "react-router-dom";
-import RootLayout from "../layouts/RootLayout";
+import BackOfficeLayout from "../layouts/BackOfficeLayout.jsx";
+import FrontOfficeLayout from "../layouts/FrontOfficeLayout.jsx";
 import Dashboard from "../pages/Dashboard";
 import {catalogRoutes} from "./catalogue-router";
-import ResetDatabase from "../pages/ResetDatabase.jsx";
 import ImportDatabase from "../pages/ImportDatabase.jsx";
+import ResetDatabase from "../pages/ResetDatabase.jsx";
+import AdminLogin from "../pages/AdminLogin.jsx";
 import {customerRoutes} from "./customer-router.jsx";
 import {orderRoutes} from "./order-router.jsx";
 
+import FrontHome from "../pages/front/FrontHome.jsx";
+import FrontLogin from "../pages/front/FrontLogin.jsx";
+import FrontProductDetail from "../pages/front/FrontProductDetail.jsx";
+import FrontCart from "../pages/front/FrontCart.jsx";
+import FrontOrders from "../pages/front/FrontOrders.jsx";
+import {AdminUserProvider} from "../context/provider/AdminUserProvider.jsx";
+import {RequireAdmin} from "../context/RequireAdmin.jsx";
+import {CustomerUserProvider} from "../context/provider/CustomerUserProvider.jsx";
+import {CartProvider} from "../context/provider/CartProvider.jsx";
+import {RequireCustomer} from "../context/RequireCustomer.jsx";
+
 export const router = createBrowserRouter([
     {
-        path: "/",
-        element: <RootLayout/>,
+        path: "/admin",
+        element: (
+            <AdminUserProvider>
+                <BackOfficeLayout/>
+            </AdminUserProvider>
+        ),
         children: [
-            {index: true, element: <Dashboard/>},
-            {path: "/reset-database", element: <ResetDatabase/>},
-            {path: "/import-database", element: <ImportDatabase/>},
-
-            catalogRoutes,
-            customerRoutes,
-            orderRoutes
+            {path: "login", element: <AdminLogin/>},
+            {
+                element: <RequireAdmin/>,
+                children: [
+                    {index: true, element: <Dashboard/>},
+                    {path: "reset-database", element: <ResetDatabase/>},
+                    {path: "import-database", element: <ImportDatabase/>},
+                    catalogRoutes,
+                    customerRoutes,
+                    orderRoutes,
+                ],
+            },
+        ],
+    },
+    {
+        path: "/",
+        element: (
+            <CustomerUserProvider>
+                <CartProvider>
+                    <FrontOfficeLayout/>
+                </CartProvider>
+            </CustomerUserProvider>
+        ),
+        children: [
+            {index: true, element: <FrontHome/>},
+            {path: "login", element: <FrontLogin/>},
+            {path: "products/:productId", element: <FrontProductDetail/>},
+            {
+                element: <RequireCustomer/>,
+                children: [
+                    {path: "cart", element: <FrontCart/>},
+                    {path: "orders", element: <FrontOrders/>},
+                ],
+            },
         ],
     },
 ]);

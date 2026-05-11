@@ -1,4 +1,4 @@
-import { PRODUCTS_CSV_HEADERS, ORDERS_CSV_HEADERS } from "../csv/csvHeaders.js";
+import { PRODUCTS_CSV_HEADERS, ORDERS_CSV_HEADERS, COMBINATIONS_CSV_HEADERS } from "../csv/csvHeaders.js";
 
 export const API_NAMES = [
     "addresses",
@@ -118,7 +118,7 @@ export const API_URLS = [
         baseUrl: "/combinations",
         ref: "combinations",
         description: "The product combinations",
-        csvHeaders: []
+        csvHeaders: COMBINATIONS_CSV_HEADERS
 
     },
     // {
