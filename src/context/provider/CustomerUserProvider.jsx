@@ -1,17 +1,48 @@
-import {useMemo, useState} from "react";
+import {useEffect, useMemo, useState} from "react";
 import {getList} from "../../api/prestashopCrud.js";
 import {ensureArray, getScalarValue} from "../../utils/util-functions.js";
 import {CustomerUserContext} from "../AppContext.jsx";
 
+const CUSTOMER_STORAGE_KEY = "prestashop.customerUser";
+
+function loadStoredCustomer() {
+    if (typeof window === "undefined") return null;
+    try {
+        const raw = window.localStorage.getItem(CUSTOMER_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.id && typeof parsed.email === "string") {
+            return {
+                id: parsed.id,
+                email: parsed.email,
+                firstname: parsed.firstname ?? "",
+                lastname: parsed.lastname ?? "",
+            };
+        }
+    } catch {
+        return null;
+    }
+    return null;
+}
+
+function toStoredCustomer(user) {
+    if (!user) return null;
+    return {
+        id: user.id,
+        email: user.email,
+        firstname: user.firstname ?? "",
+        lastname: user.lastname ?? "",
+    };
+}
+
 export function CustomerUserProvider({children}) {
-    const [customerUser, setCustomerUser] = useState(null);
+    const [customerUser, setCustomerUser] = useState(loadStoredCustomer);
 
-    const login = async (email, password) => {
+    const login = async (email) => {
         const normalizedEmail = String(email ?? "").trim().toLowerCase();
-        const normalizedPassword = String(password ?? "").trim();
 
-        if (!normalizedEmail || !normalizedPassword) {
-            return {ok: false, error: "Email et mot de passe requis."};
+        if (!normalizedEmail) {
+            return {ok: false, error: "Email requis."};
         }
 
         const response = await getList("customers", {
@@ -33,10 +64,6 @@ export function CustomerUserProvider({children}) {
             return {ok: false, error: "Client introuvable."};
         }
 
-        const storedPassword = getScalarValue(match?.passwd);
-        if (storedPassword !== normalizedPassword) {
-            return {ok: false, error: "Mot de passe invalide."};
-        }
 
         const user = {
             id: getScalarValue(match?.id),
@@ -51,6 +78,18 @@ export function CustomerUserProvider({children}) {
     };
 
     const logout = () => setCustomerUser(null);
+
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        if (customerUser) {
+            window.localStorage.setItem(
+                CUSTOMER_STORAGE_KEY,
+                JSON.stringify(toStoredCustomer(customerUser))
+            );
+        } else {
+            window.localStorage.removeItem(CUSTOMER_STORAGE_KEY);
+        }
+    }, [customerUser]);
 
     const value = useMemo(
         () => ({customerUser, login, logout}),

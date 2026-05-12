@@ -127,6 +127,17 @@ export function updateResource(ref, id, data, options = {}) {
         params: options.params, headers: options.headers, signal: options.signal,
     });
 }
+export function patchResource(ref, id, data, options = {}) {
+    const normalizedRef = normalizeRef(ref);
+
+    if (id === undefined || id === null || id === "") {
+        throw new Error("id is required for patch");
+    }
+
+    return sendJson("PATCH", `${normalizedRef}/${id}`, data, {
+        params: options.params, headers: options.headers, signal: options.signal,
+    });
+}
 
 // Fix #6: destructure only known HTTP-level options instead of spreading the
 // whole options object — prevents stray keys (listOptions, deleteOptions, etc.)

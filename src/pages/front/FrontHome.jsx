@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getList } from "../../api/prestashopCrud.js";
 import { ensureArray, getLanguageText, getScalarValue, isAbortError } from "../../utils/util-functions.js";
+import { getTaxRateForGroup } from "../../csv/mappings/csvMappingUtils.js";
 import Loading from "../../components/shared/Loading.jsx";
 import StatusBanner from "../../components/shared/StatusBanner.jsx";
 
@@ -15,6 +16,7 @@ export default function FrontHome() {
   const [products, setProducts] = useState([]);
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState(null);
+  const [taxRatesByGroup, setTaxRatesByGroup] = useState({});
 
   useEffect(() => {
     const controller = new AbortController();
@@ -35,7 +37,30 @@ export default function FrontHome() {
           throw new Error("Invalid response format");
         }
 
-        setProducts(normalizeProducts(response.data));
+        const normalized = normalizeProducts(response.data);
+        const groupIds = [
+          ...new Set(
+            normalized
+              .map((product) => getScalarValue(product?.id_tax_rules_group))
+              .filter(Boolean)
+              .map((id) => String(id))
+          ),
+        ];
+
+        const nextTaxRates = {};
+        await Promise.all(
+          groupIds.map(async (groupId) => {
+            try {
+              const rate = await getTaxRateForGroup(groupId);
+              nextTaxRates[groupId] = rate || 0;
+            } catch {
+              nextTaxRates[groupId] = 0;
+            }
+          })
+        );
+
+        setTaxRatesByGroup(nextTaxRates);
+        setProducts(normalized);
         setStatus("success");
       } catch (err) {
         if (isAbortError(err, controller.signal)) return;
@@ -69,7 +94,10 @@ export default function FrontHome() {
         {products.map((product) => {
           const id = getScalarValue(product?.id);
           const name = getLanguageText(product?.name) || "Produit";
-          const price = parseFloat(getScalarValue(product?.price) || 0).toFixed(2);
+          const priceHtValue = parseFloat(getScalarValue(product?.price) || 0);
+          const groupId = getScalarValue(product?.id_tax_rules_group);
+          const taxRate = taxRatesByGroup[String(groupId)] ?? 0;
+          const priceTtc = (priceHtValue * (1 + (Number(taxRate) || 0) / 100)).toFixed(2);
 
           return (
             <Link
@@ -80,7 +108,7 @@ export default function FrontHome() {
               <div className="space-y-2">
                 <h3 className="text-lg font-semibold text-zinc-900">{name}</h3>
                 <p className="text-sm text-zinc-500">Ref: {getScalarValue(product?.reference) || "—"}</p>
-                <p className="text-lg font-semibold text-emerald-600">{price} Ar</p>
+                <p className="text-lg font-semibold text-emerald-600">{priceTtc} Ar TTC</p>
               </div>
             </Link>
           );
@@ -89,4 +117,3 @@ export default function FrontHome() {
     </section>
   );
 }
-

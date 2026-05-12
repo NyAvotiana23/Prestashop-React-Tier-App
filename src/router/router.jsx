@@ -14,6 +14,7 @@ import FrontLogin from "../pages/front/FrontLogin.jsx";
 import FrontProductDetail from "../pages/front/FrontProductDetail.jsx";
 import FrontCart from "../pages/front/FrontCart.jsx";
 import FrontOrders from "../pages/front/FrontOrders.jsx";
+import FrontOrderDetail from "../pages/front/FrontOrderDetail.jsx";
 import {AdminUserProvider} from "../context/provider/AdminUserProvider.jsx";
 import {RequireAdmin} from "../context/RequireAdmin.jsx";
 import {CustomerUserProvider} from "../context/provider/CustomerUserProvider.jsx";
@@ -61,6 +62,7 @@ export const router = createBrowserRouter([
                 children: [
                     {path: "cart", element: <FrontCart/>},
                     {path: "orders", element: <FrontOrders/>},
+                    {path: "orders/:orderId", element: <FrontOrderDetail/>},
                 ],
             },
         ],

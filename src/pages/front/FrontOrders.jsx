@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { getList } from "../../api/prestashopCrud.js";
 import { ensureArray, getLanguageText, getScalarValue, isAbortError } from "../../utils/util-functions.js";
 import Loading from "../../components/shared/Loading.jsx";
@@ -97,9 +98,14 @@ export default function FrontOrders() {
           const totalPaid = getScalarValue(order?.total_paid) || "0";
           const stateId = getScalarValue(order?.current_state);
           const stateName = orderStates[stateId] || stateId || "—";
+          const detailPath = id ? `/orders/${id}` : "/orders";
 
           return (
-            <div key={id} className="rounded border border-zinc-200 bg-white p-4">
+            <Link
+              key={id || reference}
+              to={detailPath}
+              className="block rounded border border-zinc-200 bg-white p-4 transition hover:border-zinc-300 hover:shadow-sm"
+            >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <p className="text-sm text-zinc-500">Commande #{reference}</p>
@@ -114,7 +120,7 @@ export default function FrontOrders() {
                   <p className="text-sm font-semibold text-zinc-800">{stateName}</p>
                 </div>
               </div>
-            </div>
+            </Link>
           );
         })}
       </div>

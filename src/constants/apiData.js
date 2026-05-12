@@ -1,4 +1,4 @@
-import { PRODUCTS_CSV_HEADERS, ORDERS_CSV_HEADERS, COMBINATIONS_CSV_HEADERS } from "../csv/csvHeaders.js";
+import {PRODUCTS_CSV_HEADERS, ORDERS_CSV_HEADERS, COMBINATIONS_CSV_HEADERS} from "../csv/csvHeaders.js";
 
 export const API_NAMES = [
     "addresses",
@@ -164,10 +164,10 @@ export const API_URLS = [
     //   description: "Customer services threads",
     // },
     {
-      name: "Customers",
-      baseUrl: "/customers",
-      ref: "customers",
-      description: "The e-shop's customers",
+        name: "Customers",
+        baseUrl: "/customers",
+        ref: "customers",
+        description: "The e-shop's customers",
     },
     // {
     //   name: "Customizations",
@@ -502,24 +502,24 @@ export const API_URLS = [
     //   ref: "tags",
     //   description: "The Products tags",
     // },
-    // {
-    //   name: "Tax Rule Groups",
-    //   baseUrl: "/tax_rule_groups",
-    //   ref: "tax_rule_groups",
-    //   description: "Tax rule groups",
-    // },
-    // {
-    //   name: "Tax Rules",
-    //   baseUrl: "/tax_rules",
-    //   ref: "tax_rules",
-    //   description: "Tax rules entity",
-    // },
-    // {
-    //   name: "Taxes",
-    //   baseUrl: "/taxes",
-    //   ref: "taxes",
-    //   description: "The tax rate",
-    // },
+    {
+        name: "Tax Rule Groups",
+        baseUrl: "/tax_rule_groups",
+        ref: "tax_rule_groups",
+        description: "Tax rule groups",
+    },
+    {
+        name: "Tax Rules",
+        baseUrl: "/tax_rules",
+        ref: "tax_rules",
+        description: "Tax rules entity",
+    },
+    {
+        name: "Taxes",
+        baseUrl: "/taxes",
+        ref: "taxes",
+        description: "The tax rate",
+    },
     // {
     //   name: "Translated Configurations",
     //   baseUrl: "/translated_configurations",

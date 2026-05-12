@@ -13,7 +13,9 @@ const RESET_PRIORITY = [
     {ref: "order_invoices", priority: 1},
     {ref: "order_payments", priority: 1},
     {ref: "order_slip", priority: 1},
-    {ref: "combinations", priority: 1},
+    {ref: "tax_rules", priority: 1},
+    {ref: "tax_rule_groups", priority: 1},
+    {ref: "taxes", priority: 1},
     {ref: "carts", priority: 2},
 ];
 

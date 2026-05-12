@@ -5,7 +5,6 @@ import {useCustomerUser} from "../../hooks/useCustomerUser.jsx";
 export default function FrontLogin() {
   const { login } = useCustomerUser();
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -19,7 +18,7 @@ export default function FrontLogin() {
     setLoading(true);
 
     try {
-      const result = await login(email, password);
+      const result = await login(email);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -50,16 +49,6 @@ export default function FrontLogin() {
             className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 text-sm"
           />
         </label>
-        <label className="block text-sm text-zinc-600">
-          Mot de passe
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            className="mt-1 w-full rounded border border-zinc-300 px-3 py-2 text-sm"
-          />
-        </label>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
@@ -74,4 +63,3 @@ export default function FrontLogin() {
     </section>
   );
 }
-

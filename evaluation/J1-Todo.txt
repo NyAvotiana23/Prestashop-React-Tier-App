@@ -20,12 +20,12 @@ BackOffice : BackOfficeLayout
         - fichier :  faire default separateur en =>  , (virgule)
                      faire default decimal separator  => , (virgule) mais la valeur est entre "" !! Attention si la valeur n'est pas decimal il n'y a pas de ""
                      parse number => remplace les , (virgule)  en . (point), enlever les caracteres non utiles : %
-        - import products :
+        X - import products :
             import-data-mai-26 - fichier1.csv
              => categorie : get or create categorie by name
              => Taxe : get or create taxe by rate
 
-        - import 2 déclinaisons de produits, combinations :
+        X - import 2 déclinaisons de produits, combinations :
             import-data-mai-26 - fichier2.csv
              => get product by reference or throw new error on reference not found
              => get or create product_option_values
@@ -37,7 +37,7 @@ BackOffice : BackOfficeLayout
              => for each achat (multiple value column) =>
                 parse : get product by reference or throw new error
 
-        - On error import => tout ou rien : si erreur de validation ou post on annule tout => on reinitialise tout revenir à zero :
+        X - On error import => tout ou rien : si erreur de validation ou post on annule tout => on reinitialise tout revenir à zero :
             - reinitialisation des données :
                 - customers 0
                 - orders 1
@@ -51,23 +51,23 @@ BackOffice : BackOfficeLayout
                 - products 0
                 - carts 2
                 - combinations 1
-        - faire un ordre de priorité de reinitialisation => du plus petit au plus grand l'ordre de reinitialisation
-        - dans les imports on peut ajouter des données s'il n'existe pas :
+        X - faire un ordre de priorité de reinitialisation => du plus petit au plus grand l'ordre de reinitialisation
+        X - dans les imports on peut ajouter des données s'il n'existe pas :
             - categories
             - taxe
             - customers
             - combinaitions (product_option_values)
 
 FrontOffice : FrontOfficeLayout
-    - cree un contexte customerUserContext pour une authentification
-    - cree une page login : email / mot de passe => set customerUserContext si correct (credentials pris à partir de l'api)
-    - page acceuil
-    - page liste produit avec onCLick => ficheProduit
-    - workflow de cart (panier) :
+    X - cree un contexte customerUserContext pour une authentification
+    X - cree une page login : email / mot de passe => set customerUserContext si correct (credentials pris à partir de l'api)
+    X - page acceuil
+    X - page liste produit avec onCLick => ficheProduit
+    X - workflow de cart (panier) :
             - dans ficheProduit : boutton ajouter dans panier (cart_row)
             - voir panier page panier : liste des produits
             - validation de panier, commande avec uniquement le choix “paiement à la livraison” pas de frais de livraison
-    - liste des orders avec etat
+    X - liste des orders avec etat
 
 .csv :
 import-data-mai-26 - fichier1.csv
