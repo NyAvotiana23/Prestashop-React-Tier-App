@@ -1,7 +1,6 @@
 import {createResource} from "../api/prestashopCrud.js";
 import {parseCsvText, validateCsvHeaders} from "./csvImportUtils.js";
 
-
 export async function importCsvResource({
                                             ref,
                                             csvText,
@@ -21,7 +20,10 @@ export async function importCsvResource({
 
     const rows = parseResult.data ?? [];
     const created = [];
+    const skipped = [];
+    const warnings = [];
     const errors = [];
+    const report = [];
     const stopOnError = config.stopOnError === true;
 
     for (let index = 0; index < rows.length; index += 1) {
@@ -47,7 +49,10 @@ export async function importCsvResource({
                 });
 
                 if (!payload) {
-                    onProgress?.({index, total: rows.length, status: "skipped"});
+                    const reason = "Payload vide";
+                    skipped.push({index, reason});
+                    report.push({index, status: "skipped", reason});
+                    onProgress?.({index, total: rows.length, status: "skipped", reason});
                     continue;
                 }
 
@@ -59,13 +64,31 @@ export async function importCsvResource({
                 }
             }
 
+            if (result?.status === "skipped" || result?.skipped === true) {
+                const reason = result?.reason ?? "Ligne ignoree par le mapping";
+                skipped.push({index, reason, details: result?.details});
+                report.push({index, status: "skipped", reason, details: result?.details});
+                onProgress?.({index, total: rows.length, status: "skipped", reason});
+                continue;
+            }
+
             const createdId = result?.id ?? result?.response?.data?.[ref.slice(0, -1)]?.id ?? null;
-            created.push({index, id: createdId});
-            onProgress?.({index, total: rows.length, status: "created"});
+            if (createdId) {
+                created.push({index, id: createdId, details: result?.details});
+                report.push({index, status: "created", id: createdId, details: result?.details});
+                onProgress?.({index, total: rows.length, status: "created", id: createdId});
+                continue;
+            }
+
+            const warning = "Aucun identifiant retourne par l'API";
+            warnings.push({index, warning, details: result?.details});
+            report.push({index, status: "warning", reason: warning, details: result?.details});
+            onProgress?.({index, total: rows.length, status: "warning", reason: warning});
         } catch (error) {
-            console.log(error);
-            errors.push({index, error, row});
-            onProgress?.({index, total: rows.length, status: "error", error});
+            const message = error?.message ?? String(error);
+            errors.push({index, error, message, row});
+            report.push({index, status: "error", reason: message});
+            onProgress?.({index, total: rows.length, status: "error", error: message});
             if (stopOnError) break;
         }
     }
@@ -75,8 +98,10 @@ export async function importCsvResource({
         headerErrors,
         parseErrors: parseResult.errors ?? [],
         created,
+        skipped,
+        warnings,
         errors,
+        report,
         total: rows.length,
     };
 }
-

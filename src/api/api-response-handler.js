@@ -1,7 +1,12 @@
 import { XMLParser } from "fast-xml-parser";
 
 const listeners = new Set();
+const historyListeners = new Set();
 let lastResponse = null;
+
+const DEFAULT_API_RESPONSE_HISTORY_LIMIT = 50;
+let apiResponseHistoryLimit = DEFAULT_API_RESPONSE_HISTORY_LIMIT;
+const apiResponseHistory = [];
 
 const xmlParser = new XMLParser({
     ignoreAttributes: false,
@@ -14,9 +19,39 @@ function notify() {
     }
 }
 
+function notifyHistory() {
+    const snapshot = getApiResponseHistory();
+    for (const listener of historyListeners) {
+        listener(snapshot);
+    }
+}
+
 export function subscribeToApiResponses(listener) {
     listeners.add(listener);
     return () => listeners.delete(listener);
+}
+
+export function subscribeToApiResponseHistory(listener) {
+    historyListeners.add(listener);
+    return () => historyListeners.delete(listener);
+}
+
+export function getApiResponseHistory() {
+    return [...apiResponseHistory];
+}
+
+export function getApiResponseHistoryLimit() {
+    return apiResponseHistoryLimit;
+}
+
+export function setApiResponseHistoryLimit(nextLimit) {
+    const parsed = Number(nextLimit);
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+    apiResponseHistoryLimit = Math.floor(parsed);
+    if (apiResponseHistory.length > apiResponseHistoryLimit) {
+        apiResponseHistory.length = 0;
+        notifyHistory();
+    }
 }
 
 export function getLastApiResponse() {
@@ -33,7 +68,14 @@ export function emitApiResponse(payload) {
         ...payload,
         timestamp: Date.now(),
     };
+
+    if (apiResponseHistory.length + 1 > apiResponseHistoryLimit) {
+        apiResponseHistory.length = 0;
+    }
+    apiResponseHistory.push(lastResponse);
+
     notify();
+    notifyHistory();
     return lastResponse;
 }
 

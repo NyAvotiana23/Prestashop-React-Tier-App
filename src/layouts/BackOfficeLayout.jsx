@@ -4,13 +4,26 @@ import Header from "../components/shared/Header";
 import Footer from "../components/shared/Footer";
 import Sidebar from "../components/shared/Sidebar";
 import StatusBanner from "../components/shared/StatusBanner";
-import { getLastApiResponse, subscribeToApiResponses } from "../api/api-response-handler";
+import {
+  getApiResponseHistory,
+  getApiResponseHistoryLimit,
+  getLastApiResponse,
+  subscribeToApiResponseHistory,
+  subscribeToApiResponses,
+} from "../api/api-response-handler";
 
 export default function BackOfficeLayout() {
   const [apiResponse, setApiResponse] = useState(getLastApiResponse());
+  const [apiHistory, setApiHistory] = useState(getApiResponseHistory());
+  const [apiHistoryLimit] = useState(getApiResponseHistoryLimit());
 
   useEffect(() => {
     const unsubscribe = subscribeToApiResponses(setApiResponse);
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToApiResponseHistory(setApiHistory);
     return () => unsubscribe();
   }, []);
 
@@ -33,6 +46,9 @@ export default function BackOfficeLayout() {
                   method: apiResponse.method,
                   url: apiResponse.fullUrl,
                 }}
+                history={apiHistory}
+                historyLimit={apiHistoryLimit}
+                timestamp={apiResponse.timestamp}
               />
             </div>
           )}
@@ -44,4 +60,3 @@ export default function BackOfficeLayout() {
     </div>
   );
 }
-

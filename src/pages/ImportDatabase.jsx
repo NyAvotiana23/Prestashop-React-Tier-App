@@ -46,6 +46,15 @@ function ImportDatabase() {
         };
     }
 
+    function buildReportPreview(result) {
+        const report = result?.report ?? [];
+        return report.slice(-5).map((entry) => {
+            const indexLabel = Number.isFinite(entry.index) ? entry.index + 1 : "?";
+            const reason = entry.reason ?? entry.id ?? "";
+            return `${indexLabel}. ${entry.status}${reason ? ` - ${reason}` : ""}`;
+        });
+    }
+
     function handleChangeDelimiter(ref, value) {
         setDelimiterByRef((prev) => ({...prev, [ref]: value}));
         const existingFile = filesByRef[ref];
@@ -329,8 +338,18 @@ function ImportDatabase() {
                                             </div>
                                         ) : (
                                             <div>
-                                                Total: {importResultsByRef[row.ref].total ?? 0} | Crees: {importResultsByRef[row.ref].created?.length ?? 0} | Erreurs: {importResultsByRef[row.ref].errors?.length ?? 0}
+                                                Total: {importResultsByRef[row.ref].total ?? 0} | Crees: {importResultsByRef[row.ref].created?.length ?? 0} | Ignores: {importResultsByRef[row.ref].skipped?.length ?? 0} | Warnings: {importResultsByRef[row.ref].warnings?.length ?? 0} | Erreurs: {importResultsByRef[row.ref].errors?.length ?? 0}
                                             </div>
+                                        )}
+                                        {importResultsByRef[row.ref]?.errors?.length > 0 && (
+                                            <div className="text-red-600 mt-1">
+                                                Derniere erreur: {importResultsByRef[row.ref].errors[0]?.message ?? "Erreur inconnue"}
+                                            </div>
+                                        )}
+                                        {importResultsByRef[row.ref]?.report?.length > 0 && (
+                                            <pre className="mt-2 max-h-40 overflow-auto rounded bg-gray-50 p-2">
+                                                {buildReportPreview(importResultsByRef[row.ref]).join("\n")}
+                                            </pre>
                                         )}
                                     </div>
                                 )}

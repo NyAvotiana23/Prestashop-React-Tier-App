@@ -251,7 +251,7 @@ export async function getCustomerAddressId(customerId) {
         limit: "0,1",
     });
     const items = ensureArray(response?.data?.addresses?.address ?? []);
-    return getScalarValue(items[0]?.id || items[0]?.["@_id"]);
+    return getScalarValue(items[0]?.id);
 }
 
 export async function getFirstId(ref) {
