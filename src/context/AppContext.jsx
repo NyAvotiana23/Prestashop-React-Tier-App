@@ -6,6 +6,9 @@ export const CustomerUserContext = createContext(null);
 
 export const CartContext = createContext(null);
 
+export const DefaultValuesContext = createContext(null);
+
+
 
 
 

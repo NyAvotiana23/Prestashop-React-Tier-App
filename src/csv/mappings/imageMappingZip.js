@@ -15,25 +15,11 @@ function parseImageName(fileName) {
     const baseName = String(fileName ?? "").split(/[/\\]/).pop();
     const dotIndex = baseName.lastIndexOf(".");
     const nameWithoutExt = dotIndex >= 0 ? baseName.slice(0, dotIndex) : baseName;
-    const parts = nameWithoutExt.split("_").filter(Boolean);
-
-    if (parts.length < 2) {
-        return {reference: "", imageName: "", optionValue: ""};
-    }
-
-    if (parts.length >= 3) {
-        return {
-            reference: parts[0],
-            imageName: parts.slice(1, -1).join("_"),
-            optionValue: parts[parts.length - 1],
-        };
-    }
-
     return {
-        reference: parts[0],
-        imageName: parts.slice(1).join("_"),
-        optionValue: "",
-    };
+        baseName,
+        productRef: nameWithoutExt
+    }
+
 }
 
 async function uploadProductImage(productId, fileBlob, fileName, signal) {
@@ -48,9 +34,15 @@ async function uploadProductImage(productId, fileBlob, fileName, signal) {
         signal,
     });
 
-    const parsed = parseXml(response?.data);
-    const imageId = getScalarValue(parsed?.image?.id ?? parsed?.images?.image?.id ?? "");
-    return {response, imageId};
+    let imageId = "";
+    try {
+        const parsed = parseXml(response?.data);
+        console.log(parsed);
+    } catch {
+        // The upload succeeded (2xx) but the response body wasn't parseable XML.
+        // PrestaShop sometimes returns HTML or an empty body for image uploads — ignore.
+    }
+    return {response};
 }
 
 export async function importImagesFromZip({zipFile, onProgress, signal}) {
@@ -59,8 +51,16 @@ export async function importImagesFromZip({zipFile, onProgress, signal}) {
     }
 
     const zip = await JSZip.loadAsync(zipFile);
+
     const files = Object.values(zip.files).filter((file) => !file.dir);
-    const imageEntries = files.filter((file) => IMAGE_EXTENSIONS.has(getFileExtension(file.name)));
+    const imageEntries = files.filter((file) => {
+        // Skip files inside subdirectories (e.g. __MACOSX/, nested folders)
+
+        const isNested = file.name.includes("/");
+        const isMacJunk = file.name.startsWith("__MACOSX") || file.name.startsWith(".");
+
+        return !isNested && !isMacJunk && IMAGE_EXTENSIONS.has(getFileExtension(file.name));
+    });
 
     const created = [];
     const errors = [];
@@ -71,27 +71,24 @@ export async function importImagesFromZip({zipFile, onProgress, signal}) {
         if (signal?.aborted) break;
 
         const entry = imageEntries[index];
-        const {reference, imageName, optionValue} = parseImageName(entry.name);
+        const {baseName, productRef} = parseImageName(entry.name);
 
-        if (!reference || !imageName) {
+        if (!baseName || !productRef) {
             errors.push({index, error: new Error(`Invalid filename: ${entry.name}`)});
             onProgress?.({index, total, status: "error"});
             continue;
         }
 
         try {
-            const product = await findProductByReference(reference);
+            const product = await findProductByReference(productRef);
             if (!product) {
-                throw new Error(`Product not found for reference: ${reference}`);
+                throw new Error(`Product not found for reference: ${productRef}`);
             }
 
             const productId = getScalarValue(product?.id);
             const fileBlob = await entry.async("blob");
 
             await uploadProductImage(productId, fileBlob, entry.name, signal);
-            if (optionValue) {
-                warnings.push({index, warning: `Option value ignored: ${optionValue}`});
-            }
 
             created.push({index, productId, file: entry.name});
             onProgress?.({index, total, status: "created"});

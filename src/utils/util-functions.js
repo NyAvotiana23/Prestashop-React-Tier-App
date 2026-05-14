@@ -3,6 +3,27 @@ export function ensureArray(value) {
     return Array.isArray(value) ? value : [value];
 }
 
+
+export function isProductDateHot(date) {
+    date = new Date(date);
+    const now = new Date();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+
+
+    return date.toDateString() === yesterday.toDateString();
+}
+
+export function isProductDateNew(date) {
+    date = new Date(date);
+
+    const now = new Date(Date.now());
+    const oneWeekEarlier = new Date(now - 7 * 864e5);
+
+    return date >= oneWeekEarlier && date <= now;
+
+}
+
 // Fix #1: always look for language id="1" explicitly rather than blindly
 // taking items[0]. The order of language nodes in the XML is not guaranteed,
 // so items[0] could be language 2 if PrestaShop returns them in a different

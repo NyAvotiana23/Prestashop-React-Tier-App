@@ -5,6 +5,7 @@ import {resetDatabase} from "../api/prestashopCrud.js";
 const RESET_PRIORITY = [
     {ref: "customers", priority: 0},
     {ref: "products", priority: 0},
+    {ref: "categories", priority: 0},
     {ref: "orders", priority: 1},
     {ref: "order_details", priority: 1},
     {ref: "order_carriers", priority: 1},

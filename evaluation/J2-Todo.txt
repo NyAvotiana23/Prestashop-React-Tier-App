@@ -1,0 +1,41 @@
+BackOffice :
+1- a)
+
+1- b)
+    - Etat :
+        - Creer l'etat si elle n'existe pas
+        - Nouveau état :  Dans le panier
+    X - Tableau de bord :
+        - Par Jour :
+            - Selection de jour (default aujourd'hui)
+            - Filtre des orders pour le jour selectionnés
+
+            => Afficher le nombre total du résultat
+            => Afficher le montant total du résultat (total_paid) => Ht et TTC
+        - Géneral :
+            - Toutes les commandes
+            => Afficher le nombre total générale
+            => Afficher le montant total général => Ht et TTC
+
+
+
+
+FrontOffice :
+2- a)
+    X Page d'acceuil : Selection de l'utilisateur (liste déroulante)
+        - rajouter un utilisateur anonyme option
+
+
+2- b)
+    X Mettre une marque sur les produits : date_availability_produit :
+       - HOT : pour les produits sorties 1j avant
+       - NEW : pour les produits sorties 1 semaines avant
+
+
+2- X c) Recherche multicritère par produit :
+      - nom
+      - catégorie
+      - intervalle de prix
+
+      => Filtre par Js (React)
+      => Filtre par API utiliser filter

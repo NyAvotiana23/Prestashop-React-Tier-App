@@ -20,6 +20,8 @@ import {RequireAdmin} from "../context/RequireAdmin.jsx";
 import {CustomerUserProvider} from "../context/provider/CustomerUserProvider.jsx";
 import {CartProvider} from "../context/provider/CartProvider.jsx";
 import {RequireCustomer} from "../context/RequireCustomer.jsx";
+import FrontSelectUser from "../pages/front/FrontSelectUser.jsx";
+import {DefaultValuesProvider} from "../context/provider/DefaultValuesProvider.jsx";
 
 export const router = createBrowserRouter([
     {
@@ -47,6 +49,7 @@ export const router = createBrowserRouter([
     {
         path: "/",
         element: (
+
             <CustomerUserProvider>
                 <CartProvider>
                     <FrontOfficeLayout/>
@@ -54,7 +57,9 @@ export const router = createBrowserRouter([
             </CustomerUserProvider>
         ),
         children: [
-            {index: true, element: <FrontHome/>},
+            {index: true, element: <FrontSelectUser/>},
+            {path: "products", element: <FrontHome/>},
+            {path: "select_user", element: <FrontSelectUser/>},
             {path: "login", element: <FrontLogin/>},
             {path: "products/:productId", element: <FrontProductDetail/>},
             {

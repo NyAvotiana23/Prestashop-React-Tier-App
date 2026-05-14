@@ -1,5 +1,5 @@
-import {createResource, getList} from "../../api/prestashopCrud.js";
-import {parseCsvNumber} from "../csvImportUtils.js";
+import {createResource, getList, patchResource} from "../../api/prestashopCrud.js";
+import {parseCsvNumber, parseDateToIso, toLanguageNodes} from "../csvImportUtils.js";
 import {ensureArray, getLanguageText, getScalarValue} from "../../utils/util-functions.js";
 import {
     findProductByReference,
@@ -14,6 +14,8 @@ const DEFAULT_LANG_ID = "1";
 const DEFAULT_COUNTRY_ID = "8";
 const DEFAULT_CITY_NAME = "France";
 const DEFAULT_POST_CODE = "00111";
+const DEFAULT_STATE_COLOR = "#eeff00";
+
 
 const ORDER_STATE_FULL_OPTIONS = [
     {id: "1", color: "#34209E", name: "En attente du paiement par cheque", template: "cheque"},
@@ -35,9 +37,9 @@ const ORDER_STATE_FULL_OPTIONS = [
     {id: "17", color: "#3498D8", name: "Autorisation. A capturer par le marchand", template: ""},
 ];
 
-const ANONYM_CUSTOMER_GMAIL = "anonym@anonym.com";
-const ANONYM_CUSTOMER_NAME = "anonymous";
-const ANONYM_CUSTOMER_PASSWORD = "anonymous";
+export const ANONYM_CUSTOMER_GMAIL = "anonym@anonym.com";
+export const ANONYM_CUSTOMER_NAME = "anonymous";
+export const ANONYM_CUSTOMER_PASSWORD = "anonymous";
 
 
 function normalizeText(value) {
@@ -59,6 +61,33 @@ function normalizeText(value) {
         .replace(/[\u0300-\u036f]/g, "")
         .toLowerCase()
         .trim();
+}
+
+async function ensureState(state) {
+    const normalized = normalizeText(state);
+    const statesResponse = await getList("order_states", {
+        display: "full",
+    });
+
+    const statesResult = statesResponse?.data?.order_states?.order_state ?? [];
+    const match = statesResult.find((state) => {
+        const optionName = normalizeText(getLanguageText(state.name));
+        return normalized === optionName;
+    });
+
+    if (!match) {
+        const statePayload = {
+            order_state: {
+                name: toLanguageNodes(state),
+                color: DEFAULT_STATE_COLOR
+            }
+        }
+        const createdState = await createResource("order_states", statePayload)
+        return getScalarValue(createdState?.id);
+    }
+
+    return getScalarValue(match?.id) ?? null;
+
 }
 
 function mapEtatToStateId(etat) {
@@ -107,7 +136,7 @@ function splitCustomerName(fullName) {
     return {firstname: parts[0], lastname: parts.slice(1).join(" ")};
 }
 
-async function ensureCustomerAnonym() {
+export async function ensureCustomerAnonym() {
     let existingAnonym = await getCustomerByEmail(ANONYM_CUSTOMER_GMAIL);
     if (!existingAnonym) {
         const payload = {
@@ -296,15 +325,30 @@ export async function processOrderRow(row) {
             taxRate = taxRateCache[taxRulesGroupId] || 0;
         }
 
-        const priceHt = Number(parseCsvNumber(product?.price, {decimalSeparator: ","}) || 0);
-        const priceTtc = Number((priceHt * (1 + Number(taxRate) / 100)).toFixed(2));
+        const baseHt = parseFloat(getScalarValue(product?.price) ?? "0") || 0;
 
-        items.push({product, quantity: achat.quantity, combinationId, priceHt, priceTtc});
+        let effectiveHt = baseHt;
+        if (combinationId && combinationId !== "0") {
+            const comboResponse = await getList("combinations", {
+                display: "full",
+                filters: {id: combinationId},
+                limit: "0,1",
+            });
+            const combo = ensureArray(comboResponse?.data?.combinations?.combination ?? [])[0];
+            const deltaHt = parseFloat(getScalarValue(combo?.price) ?? "0") || 0;
+            effectiveHt = baseHt + deltaHt;
+        }
+
+        const priceTtc = parseFloat((effectiveHt * (1 + taxRate / 100)).toFixed(2));
+
+        items.push({product, quantity: achat.quantity, combinationId, priceHt: effectiveHt, priceTtc});
     }
 
     const currencyId = (await getFirstId("currencies")) || "1";
     const carrierId = (await getFirstId("carriers")) || "1";
     const langId = DEFAULT_LANG_ID;
+
+    const createdDate = parseDateToIso(row?.date) + " 00:00:00";
 
     const cartPayload = {
         cart: {
@@ -333,16 +377,7 @@ export async function processOrderRow(row) {
         throw new Error(`Creation du panier echouee (client: ${customerId})`);
     }
 
-    // Don't create order if etat is null
-    if (!row?.etat) {
-        return {
-            status: "skipped",
-            reason: "Etat vide: commande non creee",
-            details: {cartId, email: row?.email},
-        };
-    }
-
-    const stateId = mapEtatToStateId(row?.etat);
+    const stateId = ensureState(row?.etat);
     if (!stateId) {
         throw new Error(`Etat de commande inconnu: ${row?.etat}`);
     }
@@ -362,7 +397,6 @@ export async function processOrderRow(row) {
             id_carrier: carrierId,
             module: "ps_cashondelivery",
             payment: "Paiement a la livraison",
-            current_state: stateId,
             total_paid: String(totalPaid),
             total_paid_real: String(totalPaid),
             total_products: String(totalPaid),
@@ -376,9 +410,9 @@ export async function processOrderRow(row) {
                         product_quantity: item.quantity,
                         product_name: getLanguageText(item.product?.name) || "Produit",
                         product_reference: getScalarValue(item.product?.reference) || "",
-                        product_price: item.priceTtc.toFixed(2),
-                        unit_price_tax_incl: item.priceTtc.toFixed(2),
-                        unit_price_tax_excl: item.priceHt.toFixed(2),
+                        product_price: item.priceTtc.toFixed(6),
+                        unit_price_tax_incl: item.priceTtc.toFixed(6),
+                        unit_price_tax_excl: item.priceHt.toFixed(6),
                     })),
                 },
             },
@@ -387,9 +421,33 @@ export async function processOrderRow(row) {
 
     const orderResponse = await createResource("orders", orderPayload);
     const orderId = getScalarValue(orderResponse?.data?.order?.id);
+
+
     if (!orderId) {
         throw new Error(`Creation de la commande echouee (cart: ${cartId})`);
     }
+    // update dates :
+    await patchResource("carts", cartId, {
+        cart: {
+            id: cartId,
+            date_add: createdDate
+        }
+
+    })
+    await patchResource("orders", orderId, {
+        order: {
+            id: orderId,
+            date_add: createdDate
+        }
+
+    })
+
+    // await createResource("order_histories", {
+    //     order_history: {
+    //         id_order: orderId,
+    //         id_order_state: stateId,
+    //     },
+    // });
 
     return {
         status: "created",

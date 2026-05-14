@@ -6,6 +6,7 @@ import {ensureArray, getScalarValue} from "../../utils/util-functions.js";
 import StatusBanner from "../../components/shared/StatusBanner.jsx";
 import {useCart} from "../../hooks/useCart.jsx";
 import {useCustomerUser} from "../../hooks/useCustomerUser.jsx";
+import {useDefaultValues} from "../../hooks/useDefaultValues.jsx";
 
 const DEFAULT_COUNTRY_ID = "8";
 
@@ -63,6 +64,7 @@ async function getCustomerAddresses(customerId) {
 
 
 export default function FrontCart() {
+    const {defaultCountry, defaultCurrency, loadingDefaultValues} = useDefaultValues();
     const {items, updateQuantity, removeItem, clear, total} = useCart();
     const {customerUser} = useCustomerUser();
     const [status, setStatus] = useState("idle");
@@ -186,7 +188,7 @@ export default function FrontCart() {
             const cartResponse = await createResource("carts", cartPayload);
             const cartId = getScalarValue(cartResponse?.data?.cart?.id);
 
-            const totalPaid = total.toFixed(2);
+            const totalPaid = total.toFixed(6);
 
             const orderPayload = {
                 order: {
@@ -212,9 +214,9 @@ export default function FrontCart() {
                                 product_quantity: item.quantity,
                                 product_name: item.name,
                                 product_reference: item.reference ?? "",
-                                product_price: Number(item.price || 0).toFixed(2),
-                                unit_price_tax_incl: Number(item.price || 0).toFixed(2),
-                                unit_price_tax_excl: Number(item.price || 0).toFixed(2),
+                                product_price: Number(item.price || 0).toFixed(6),
+                                unit_price_tax_incl: Number(item.price || 0).toFixed(6),
+                                unit_price_tax_excl: Number(item.price || 0).toFixed(6),
                             })),
                         },
                     },
@@ -374,7 +376,7 @@ export default function FrontCart() {
                                 </button>
                             </div>
                             <p className="text-lg font-semibold text-emerald-600">
-                                {(Number(item.price) * item.quantity).toFixed(2)} Ar
+                                {(Number(item.price) * item.quantity).toFixed(2)}  {getLanguageText(defaultCurrency?.symbol)}
                             </p>
                         </div>
                     </div>
@@ -385,7 +387,7 @@ export default function FrontCart() {
                 className="flex flex-wrap items-center justify-between gap-4 rounded border border-zinc-200 bg-white p-4">
                 <div>
                     <p className="text-sm text-zinc-500">Total</p>
-                    <p className="text-2xl font-semibold text-zinc-900">{total.toFixed(2)} Ar</p>
+                    <p className="text-2xl font-semibold text-zinc-900">{total.toFixed(2)}  {getLanguageText(defaultCurrency?.symbol)} </p>
                 </div>
                 <button
                     type="button"

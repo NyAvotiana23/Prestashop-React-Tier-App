@@ -1,14 +1,24 @@
 import {useEffect, useState} from "react";
 import {Link, useParams} from "react-router-dom";
 import {getById, getList} from "../../api/prestashopCrud.js";
-import {ensureArray, getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
+import {
+    ensureArray,
+    getLanguageText,
+    getScalarValue,
+    isAbortError,
+    isProductDateHot, isProductDateNew
+} from "../../utils/util-functions.js";
 import Loading from "../../components/shared/Loading.jsx";
 import StatusBanner from "../../components/shared/StatusBanner.jsx";
 import {useCart} from "../../hooks/useCart.jsx";
 import {getTaxRateForGroup} from "../../csv/mappings/csvMappingUtils.js";
+import {useDefaultValues} from "../../hooks/useDefaultValues.jsx";
+import {HotBadge, NewBadge} from "../../utils/util-components.jsx";
 
 export default function FrontProductDetail() {
     const {productId} = useParams();
+    const {defaultCountry, defaultCurrency, loadingDefaultValues} = useDefaultValues();
+
     const {addItem} = useCart();
     const [product, setProduct] = useState(null);
     const [status, setStatus] = useState("idle");
@@ -24,6 +34,7 @@ export default function FrontProductDetail() {
         const next = Math.max(1, Number(value) || 1);
         setCombinationQuantities((prev) => ({...prev, [String(combinationId)]: next}));
     }
+
     const [combinations, setCombinations] = useState([]);
     const [optionValueMap, setOptionValueMap] = useState({});
     const [optionGroupMap, setOptionGroupMap] = useState({});
@@ -227,7 +238,7 @@ export default function FrontProductDetail() {
 
     return (
         <section className="space-y-6">
-            <Link to="/" className="text-sm font-semibold text-emerald-600 hover:text-emerald-700">
+            <Link to="/products" className="text-sm font-semibold text-emerald-600 hover:text-emerald-700">
                 Retour aux produits
             </Link>
 
@@ -250,11 +261,17 @@ export default function FrontProductDetail() {
                 )}
 
                 <div className="mt-4 space-y-1">
+                    {isProductDateHot(product?.available_date) && <HotBadge/>}
+                    {isProductDateNew(product?.available_date) && <NewBadge/>}
                     <p className="text-2xl font-semibold text-emerald-600">
-                        {priceTtc} Ar TTC
+                        {priceTtc} {getLanguageText(defaultCurrency?.symbol)} TTC
                     </p>
                     <p className="text-sm text-zinc-600">
-                        {priceHt} Ar HT · Taxe {Number(taxRate || 0).toFixed(2)}% ({taxAmount} Ar)
+                        {priceHt} {getLanguageText(defaultCurrency?.symbol)} HT · Taxe {Number(taxRate || 0).toFixed(2)}%
+                        ({taxAmount}  {getLanguageText(defaultCurrency?.symbol)} )
+                    </p>
+                    <p className="text-sm text-zinc-600">
+                        Available date : {getLanguageText(product?.available_date)}
                     </p>
                     {baseStock !== null && (
                         <p className="text-sm text-zinc-600">Stock disponible: {baseStock}</p>
@@ -269,7 +286,8 @@ export default function FrontProductDetail() {
                                 type="button"
                                 onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                                 className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 text-base font-bold"
-                            >−</button>
+                            >−
+                            </button>
                             <input
                                 type="number"
                                 min={1}
@@ -281,7 +299,8 @@ export default function FrontProductDetail() {
                                 type="button"
                                 onClick={() => setQuantity((q) => q + 1)}
                                 className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 text-base font-bold"
-                            >+</button>
+                            >+
+                            </button>
                         </div>
                         <button
                             type="button"
@@ -348,7 +367,7 @@ export default function FrontProductDetail() {
                                                 </div>
                                             )}
                                             <p className="mt-2 text-sm text-zinc-600">
-                                                {combinationHt.toFixed(2)} Ar HT · {combinationTtc.toFixed(2)} Ar TTC
+                                                {combinationHt.toFixed(2)}  {getLanguageText(defaultCurrency?.symbol)}  HT · {combinationTtc.toFixed(2)}  {getLanguageText(defaultCurrency?.symbol)}  TTC
                                             </p>
                                             <p className="text-xs text-zinc-500">
                                                 Taxe {Number(taxRate || 0).toFixed(2)}%
@@ -366,7 +385,8 @@ export default function FrontProductDetail() {
                                                     type="button"
                                                     onClick={() => setCombinationQty(combinationId, getCombinationQty(combinationId) - 1)}
                                                     className="flex h-7 w-7 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 text-base font-bold"
-                                                >−</button>
+                                                >−
+                                                </button>
                                                 <input
                                                     type="number"
                                                     min={1}
@@ -378,7 +398,8 @@ export default function FrontProductDetail() {
                                                     type="button"
                                                     onClick={() => setCombinationQty(combinationId, getCombinationQty(combinationId) + 1)}
                                                     className="flex h-7 w-7 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 text-base font-bold"
-                                                >+</button>
+                                                >+
+                                                </button>
                                             </div>
                                             <button
                                                 type="button"

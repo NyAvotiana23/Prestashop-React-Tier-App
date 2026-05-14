@@ -3,7 +3,7 @@ import {parseCsvNumber, slugify, toLanguageNodes} from "../csvImportUtils.js";
 import {ensureArray, getLanguageText, getScalarValue} from "../../utils/util-functions.js";
 
 const DEFAULT_LANG_ID = "1";
-const DEFAULT_PARENT_CATEGORY = "2";
+const DEFAULT_PARENT_CATEGORY = "1";
 const DEFAULT_COUNTRY_ID = "8";
 const DEFAULT_SHOP_ID = "1";
 
@@ -31,13 +31,25 @@ export async function ensureCategory(name) {
     const normalizedName = String(name ?? "").trim();
     if (!normalizedName) return "";
 
-    const categories = await listAll("categories");
-    const match = categories.find(
-        (category) =>
-            getLanguageText(category?.name).toLowerCase() === normalizedName.toLowerCase()
+    const categoriesResponse = await getList("categories",
+        {
+            display: "full",
+            sort: "[id_ASC]",
+            filters: {
+                name: normalizedName
+            }
+        }
     );
 
-    if (match) return getScalarValue(match?.id);
+    const categoriesData = categoriesResponse?.data?.categories?.category ?? [];
+    console.log("Categories response " +  categoriesResponse)
+    console.log("Norm : " + normalizedName);
+    console.log("Categories data : " + categoriesData);
+
+    if (categoriesData.length > 0) {
+        console.log("Find : " + normalizedName + " Id : " + categoriesData[0]?.id)
+        return categoriesData[0]?.id;
+    }
 
     const payload = {
         category: {

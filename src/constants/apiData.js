@@ -107,12 +107,12 @@ export const API_URLS = [
         csvHeaders: []
 
     },
-    // {
-    //   name: "Categories",
-    //   baseUrl: "/categories",
-    //   ref: "categories",
-    //   description: "The product categories",
-    // },
+    {
+      name: "Categories",
+      baseUrl: "/categories",
+      ref: "categories",
+      description: "The product categories",
+    },
     {
         name: "Combinations",
         baseUrl: "/combinations",

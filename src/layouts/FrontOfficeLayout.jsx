@@ -4,11 +4,15 @@ import {useCart} from "../hooks/useCart.jsx";
 import {useEffect, useState} from "react";
 import {getLastApiResponse, subscribeToApiResponses} from "../api/api-response-handler.js";
 import StatusBanner from "../components/shared/StatusBanner.jsx";
+import {useDefaultValues} from "../hooks/useDefaultValues.jsx";
+import {getLanguageText, getScalarValue} from "../utils/util-functions.js";
 
 
 export default function FrontOfficeLayout() {
     const {customerUser, logout} = useCustomerUser();
     const {items} = useCart();
+    const {defaultCountry, defaultCurrency, loadingDefaultValues} = useDefaultValues();
+
 
 
     const [apiResponse, setApiResponse] = useState(getLastApiResponse());
@@ -25,9 +29,12 @@ export default function FrontOfficeLayout() {
                     <div>
                         <p className="text-xs uppercase tracking-[0.2em] text-zinc-400">Front office</p>
                         <h1 className="text-xl font-semibold text-zinc-900">Boutique</h1>
+                        <span className="text-xs uppercase tracking-[0.2em] text-zinc-400">Country : {getLanguageText(defaultCountry?.name)} </span>
+                        <span className="text-xs uppercase tracking-[0.2em] text-zinc-400">Currency : {getScalarValue(defaultCurrency?.name)} </span>
+
                     </div>
                     <nav className="flex items-center gap-4 text-sm font-semibold">
-                        <Link className="text-zinc-700 hover:text-zinc-900" to="/">
+                        <Link className="text-zinc-700 hover:text-zinc-900" to="/products">
                             Accueil
                         </Link>
                         <Link className="text-zinc-700 hover:text-zinc-900" to="/cart">

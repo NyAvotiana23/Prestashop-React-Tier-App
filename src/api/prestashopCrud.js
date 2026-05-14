@@ -127,6 +127,7 @@ export function updateResource(ref, id, data, options = {}) {
         params: options.params, headers: options.headers, signal: options.signal,
     });
 }
+
 export function patchResource(ref, id, data, options = {}) {
     const normalizedRef = normalizeRef(ref);
 
@@ -143,7 +144,9 @@ export function patchResource(ref, id, data, options = {}) {
 // whole options object — prevents stray keys (listOptions, deleteOptions, etc.)
 // from leaking into prestashopRequest / axios.
 export async function deleteResource(ref, id, options = {}) {
+
     const normalizedRef = normalizeRef(ref);
+
 
     if (id === undefined || id === null || id === "") {
         throw new Error("id is required for deleteResource");
@@ -227,8 +230,13 @@ export async function resetDatabase(refs, options = {}) {
         if (!listError) {
             for (const id of ids) {
                 try {
+                    // Categories must have the racine  id = 1
+                    if (normalizedRef === "categories" && String(id) === "1") {
+                        continue;
+                    }
                     await deleteResource(normalizedRef, id, options.deleteOptions ?? {});
                     deleted.push(id);
+
                 } catch (err) {
                     errors.push({id, error: err});
                 }
