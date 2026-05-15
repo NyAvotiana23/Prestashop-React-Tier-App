@@ -24,6 +24,16 @@ function normalizeProducts(data) {
 export default function FrontHome() {
 
 
+    const apiBaseUrl = import.meta.env.VITE_PRESTASHOP_API_URL;
+    const apiKey = import.meta.env.VITE_PRESTASHOP_API_KEY;
+    const imageBaseUrl = apiBaseUrl ? String(apiBaseUrl).replace(/\/+$/, "") : "";
+    const imageQuery = apiKey ? `?ws_key=${apiKey}` : "";
+
+    function buildImageUrl(productId, imageId) {
+        if (!imageBaseUrl || !productId || !imageId) return "";
+        return `${imageBaseUrl}/images/products/${productId}/${imageId}${imageQuery}`;
+    }
+
     const {defaultCountry, defaultCurrency, loadingDefaultValues, defaultCategories} = useDefaultValues();
     const [products, setProducts] = useState([]);
     const [status, setStatus] = useState("idle");
@@ -38,7 +48,7 @@ export default function FrontHome() {
         const {name, categoryId, minPrice, maxPrice} = Object.fromEntries(data.entries());
         const filters = {};
         if (name) {
-            filters["name"] = name.trim();
+            filters["name"] = `%[${name.trim()}]%`;
         }
         if (categoryId) {
             filters["id_category_default"] = categoryId;
@@ -200,7 +210,7 @@ export default function FrontHome() {
                     const groupId = getScalarValue(product?.id_tax_rules_group);
                     const taxRate = taxRatesByGroup[String(groupId)] ?? 0;
                     const priceTtc = (priceHtValue * (1 + (Number(taxRate) || 0) / 100)).toFixed(2);
-
+                    const imageId = getScalarValue(product?.id_default_image);
                     return (
                         <Link
                             key={id}
@@ -210,6 +220,12 @@ export default function FrontHome() {
                             <div className="space-y-2">
                                 {isProductDateHot(product?.available_date) && <HotBadge/>}
                                 {isProductDateNew(product?.available_date) && <NewBadge/>}
+                                <img
+                                    src={buildImageUrl(id, imageId)}
+                                    alt={name}
+                                    className="aspect-square w-full rounded-lg border border-zinc-200 object-cover"
+                                    loading="lazy"
+                                />
                                 <p>New param : {getScalarValue(product?.price_ttc)}</p>
                                 <h3 className="text-lg font-semibold text-zinc-900">{name}</h3>
                                 <p className="text-sm text-zinc-500">Ref: {getScalarValue(product?.reference) || "—"}</p>

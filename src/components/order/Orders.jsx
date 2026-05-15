@@ -3,7 +3,7 @@ import {Link} from "react-router-dom";
 import Loading from "../shared/Loading.jsx";
 import StatusBanner from "../shared/StatusBanner.jsx";
 import {createResource, getList, updateResource} from "../../api/prestashopCrud.js";
-import {ensureArray, getScalarValue, isAbortError} from "../../utils/util-functions.js";
+import {ensureArray, formatMoney, getScalarValue, isAbortError} from "../../utils/util-functions.js";
 
 const ORDER_STATE_OPTIONS = [
     {id: "2", color: "#3498D8", name: "Paiement accepté", template: "payment"},
@@ -37,10 +37,7 @@ function normalizeOrders(data) {
     return ensureArray(ordersNode);
 }
 
-function formatMoney(value) {
-    const amount = Number.parseFloat(getScalarValue(value) || "");
-    return Number.isFinite(amount) ? amount.toFixed(2) : "N/A";
-}
+
 
 function Orders() {
     const [orders, setOrders] = useState([]);

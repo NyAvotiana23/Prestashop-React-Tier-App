@@ -1,6 +1,6 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {getList} from "../api/prestashopCrud.js";
-import {ensureArray, getScalarValue, isAbortError} from "../utils/util-functions.js";
+import {ensureArray, formatMoney, getScalarValue, isAbortError} from "../utils/util-functions.js";
 import Loading from "../components/shared/Loading.jsx";
 import StatusBanner from "../components/shared/StatusBanner.jsx";
 
@@ -233,22 +233,22 @@ function Dashboard(props) {
 
                         <div className="bg-blue-50 rounded-xl p-4 text-center">
                             <p className="text-xs text-gray-500 mb-1">Total paid</p>
-                            <p className="text-2xl font-bold text-blue-700">{statistics.total_paid}</p>
+                            <p className="text-2xl font-bold text-blue-700">{formatMoney(statistics.total_paid)}</p>
                         </div>
 
                         <div className="bg-green-50 rounded-xl p-4 text-center">
                             <p className="text-xs text-gray-500 mb-1">Total paid real</p>
-                            <p className="text-2xl font-bold text-green-700">{statistics.total_paid_real}</p>
+                            <p className="text-2xl font-bold text-green-700">{formatMoney(statistics.total_paid_real)}</p>
                         </div>
 
                         <div className="bg-purple-50 rounded-xl p-4 text-center">
                             <p className="text-xs text-gray-500 mb-1">Tax incl.</p>
-                            <p className="text-2xl font-bold text-purple-700">{statistics.total_paid_tax_incl}</p>
+                            <p className="text-2xl font-bold text-purple-700">{formatMoney(statistics.total_paid_tax_incl)}</p>
                         </div>
 
                         <div className="bg-orange-50 rounded-xl p-4 text-center">
                             <p className="text-xs text-gray-500 mb-1">Tax excl.</p>
-                            <p className="text-2xl font-bold text-orange-700">{statistics.total_paid_tax_excl}</p>
+                            <p className="text-2xl font-bold text-orange-700">{formatMoney(statistics.total_paid_tax_excl)}</p>
                         </div>
 
                     </div>

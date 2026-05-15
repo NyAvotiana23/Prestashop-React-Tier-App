@@ -9,3 +9,5 @@ export function NewBadge() {
         <><span className={"rounded p-2 bg-blue-500"}>New</span></>
     )
 }
+
+

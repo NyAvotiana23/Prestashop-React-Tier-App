@@ -13,7 +13,10 @@ export function isProductDateHot(date) {
 
     return date.toDateString() === yesterday.toDateString();
 }
-
+export function formatMoney(value) {
+    const amount = Number.parseFloat(getScalarValue(value) || "");
+    return Number.isFinite(amount) ? amount.toFixed(2) : "N/A";
+}
 export function isProductDateNew(date) {
     date = new Date(date);
 

@@ -45,6 +45,9 @@ export default function FrontOfficeLayout() {
                                 <Link className="text-zinc-700 hover:text-zinc-900" to="/orders">
                                     Mes commandes
                                 </Link>
+                                <Link className="text-zinc-700 hover:text-zinc-900" to="/cart_histories">
+                                    Mes paniers
+                                </Link>
                                 <button
                                     type="button"
                                     onClick={logout}

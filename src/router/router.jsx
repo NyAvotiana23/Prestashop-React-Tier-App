@@ -22,6 +22,8 @@ import {CartProvider} from "../context/provider/CartProvider.jsx";
 import {RequireCustomer} from "../context/RequireCustomer.jsx";
 import FrontSelectUser from "../pages/front/FrontSelectUser.jsx";
 import {DefaultValuesProvider} from "../context/provider/DefaultValuesProvider.jsx";
+import FrontCartHistory from "../pages/front/FrontCartHistory.jsx";
+import StockAvailable from "../components/stock/StockAvailable.jsx";
 
 export const router = createBrowserRouter([
     {
@@ -38,6 +40,7 @@ export const router = createBrowserRouter([
                 children: [
                     {index: true, element: <Dashboard/>},
                     {path: "reset-database", element: <ResetDatabase/>},
+                    {path: "import-database", element: <ImportDatabase/>},
                     {path: "import-database", element: <ImportDatabase/>},
                     catalogRoutes,
                     customerRoutes,
@@ -66,6 +69,7 @@ export const router = createBrowserRouter([
                 element: <RequireCustomer/>,
                 children: [
                     {path: "cart", element: <FrontCart/>},
+                    {path: "cart_histories", element: <FrontCartHistory/>},
                     {path: "orders", element: <FrontOrders/>},
                     {path: "orders/:orderId", element: <FrontOrderDetail/>},
                 ],

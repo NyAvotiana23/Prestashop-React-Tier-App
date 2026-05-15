@@ -377,6 +377,15 @@ export async function processOrderRow(row) {
         throw new Error(`Creation du panier echouee (client: ${customerId})`);
     }
 
+    // Don't create order if etat is null
+    if (!row?.etat || normalizeText(getScalarValue(row?.etat)) === normalizeText("dans le panier")) {
+        return {
+            status: "skipped",
+            reason: "Dans le panier, carte crées seulement. Etat vide: commande non creee",
+            details: {cartId, email: row?.email},
+        };
+    }
+
     const stateId = ensureState(row?.etat);
     if (!stateId) {
         throw new Error(`Etat de commande inconnu: ${row?.etat}`);
