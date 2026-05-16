@@ -1,5 +1,5 @@
 export const PRODUCTS_CSV_HEADERS = [
-    "date_produit",
+    "date_availability_produit",
     "nom",
     "reference",
     "prix_ttc",

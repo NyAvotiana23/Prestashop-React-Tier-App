@@ -11,13 +11,61 @@ const DEFAULT_MINIMAL_QUANTITY = "1";
 const DEFAULT_SHOW_PRICE = "1";
 
 
+function parseFlexibleNumber(value, options = {}) {
+    const comma = parseCsvNumber(value, {decimalSeparator: ",", ...options});
+    if (comma !== "") return Number(comma);
+    const dot = parseCsvNumber(value, {decimalSeparator: ".", ...options});
+    if (dot !== "") return Number(dot);
+    return NaN;
+}
+
 /**
  * Ressource concernés : Product, Tax, Tax Rule, Tax Rule Group, Categorie
  * @param row
  * @returns {Promise<*>}
  */
 
+export function validateProductRow(row) {
+    const errors = [];
+    const name = String(row?.nom ?? "").trim();
+    const reference = String(row?.reference ?? "").trim();
+    if (!name || !reference) {
+        errors.push("Champs requis manquants (nom ou reference).");
+    }
+
+    const dateRaw = String(row?.date_availability_produit ?? "").trim();
+    if (dateRaw) {
+        const iso = parseDateToIso(dateRaw);
+        if (!iso) errors.push("Date disponibilite invalide (format attendu JJ/MM/AAAA).");
+    }
+
+    const priceTtc = parseFlexibleNumber(row?.prix_ttc);
+    if (!Number.isFinite(priceTtc) || priceTtc <= 0) {
+        errors.push("Prix TTC invalide ou negatif.");
+    }
+
+    const taxRate = parseFlexibleNumber(row?.Taxe, {stripPercent: true});
+    if (!Number.isFinite(taxRate) || taxRate < 0) {
+        errors.push("Taxe invalide.");
+    }
+
+    const wholesale = parseFlexibleNumber(row?.prix_achat);
+    if (!Number.isFinite(wholesale) || wholesale < 0) {
+        errors.push("Prix achat invalide ou negatif.");
+    }
+
+    return errors;
+}
+
+function ensureProductRow(row) {
+    const errors = validateProductRow(row);
+    if (errors.length > 0) {
+        throw new Error(errors.join(" | "));
+    }
+}
+
 export async function mapProductRowToPayload(row) {
+    ensureProductRow(row);
     const name = row?.nom?.trim();
     const reference = row?.reference?.trim();
     if (!name || !reference) {

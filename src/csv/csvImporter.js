@@ -1,5 +1,6 @@
 import {createResource} from "../api/prestashopCrud.js";
 import {parseCsvText, validateCsvHeaders} from "./csvImportUtils.js";
+import {ensureArray} from "../utils/util-functions.js";
 
 export async function importCsvResource({
                                             ref,
@@ -30,6 +31,21 @@ export async function importCsvResource({
         if (signal?.aborted) break;
 
         const row = rows[index];
+
+        const validationErrors =
+            typeof config.validateRow === "function"
+                ? ensureArray(config.validateRow(row)).filter(Boolean)
+                : [];
+        if (validationErrors.length > 0) {
+            const reason = validationErrors.join(" | ");
+            const error = new Error(reason);
+            errors.push({index, error, message: reason, row, validationErrors});
+            report.push({index, status: "error", reason, validationErrors});
+            onProgress?.({index, total: rows.length, status: "error", error: reason});
+            if (stopOnError) break;
+            continue;
+        }
+
         try {
             let result;
 

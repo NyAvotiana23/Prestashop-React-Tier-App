@@ -2,6 +2,7 @@ import {useEffect, useMemo, useState} from "react";
 import {getList} from "../../api/prestashopCrud.js";
 import {ensureArray, getScalarValue} from "../../utils/util-functions.js";
 import {CustomerUserContext} from "../AppContext.jsx";
+import {ANONYM_CUSTOMER_GMAIL} from "../../csv/mappings/csvOrderMapping.js";
 
 const CUSTOMER_STORAGE_KEY = "prestashop.customerUser";
 
@@ -64,6 +65,7 @@ export function CustomerUserProvider({children}) {
             return {ok: false, error: "Client introuvable."};
         }
 
+        const isAnonymUser = email === ANONYM_CUSTOMER_GMAIL;
 
         const user = {
             id: getScalarValue(match?.id),
@@ -71,6 +73,7 @@ export function CustomerUserProvider({children}) {
             firstname: getScalarValue(match?.firstname),
             lastname: getScalarValue(match?.lastname),
             raw: match,
+            isAnonymUser
         };
 
         setCustomerUser(user);

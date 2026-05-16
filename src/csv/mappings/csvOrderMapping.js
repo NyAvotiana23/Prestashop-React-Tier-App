@@ -1,5 +1,5 @@
 import {createResource, getList, patchResource} from "../../api/prestashopCrud.js";
-import {parseCsvNumber, parseDateToIso, toLanguageNodes} from "../csvImportUtils.js";
+import {parseDateToIso, toLanguageNodes} from "../csvImportUtils.js";
 import {ensureArray, getLanguageText, getScalarValue} from "../../utils/util-functions.js";
 import {
     findProductByReference,
@@ -16,26 +16,6 @@ const DEFAULT_CITY_NAME = "France";
 const DEFAULT_POST_CODE = "00111";
 const DEFAULT_STATE_COLOR = "#eeff00";
 
-
-const ORDER_STATE_FULL_OPTIONS = [
-    {id: "1", color: "#34209E", name: "En attente du paiement par cheque", template: "cheque"},
-    {id: "2", color: "#3498D8", name: "Paiement accepte", template: "payment"},
-    {id: "3", color: "#3498D8", name: "En cours de preparation", template: "preparation"},
-    {id: "4", color: "#01B887", name: "Expedie", template: "shipped"},
-    {id: "5", color: "#01B887", name: "Livre", template: ""},
-    {id: "6", color: "#2C3E50", name: "Annule", template: "order_canceled"},
-    {id: "7", color: "#01B887", name: "Rembourse", template: "refund"},
-    {id: "8", color: "#E74C3C", name: "Erreur de paiement", template: "payment_error"},
-    {id: "9", color: "#3498D8", name: "En attente de reapprovisionnement (paye)", template: "outofstock"},
-    {id: "10", color: "#34209E", name: "En attente de virement bancaire", template: "bankwire"},
-    {id: "11", color: "#3498D8", name: "Paiement a distance accepte", template: "payment"},
-    {id: "12", color: "#34209E", name: "En attente de reapprovisionnement (non paye)", template: "outofstock"},
-    {id: "13", color: "#34209E", name: "En attente de paiement a la livraison", template: "cashondelivery"},
-    {id: "14", color: "#34209E", name: "En attente de paiement", template: ""},
-    {id: "15", color: "#01B887", name: "Remboursement partiel", template: ""},
-    {id: "16", color: "#3498D8", name: "Paiement partiel", template: ""},
-    {id: "17", color: "#3498D8", name: "Autorisation. A capturer par le marchand", template: ""},
-];
 
 export const ANONYM_CUSTOMER_GMAIL = "anonym@anonym.com";
 export const ANONYM_CUSTOMER_NAME = "anonymous";
@@ -83,33 +63,23 @@ async function ensureState(state) {
             }
         }
         const createdState = await createResource("order_states", statePayload)
-        return getScalarValue(createdState?.id);
+        return getScalarValue(createdState?.data?.order_state?.id);
     }
 
     return getScalarValue(match?.id) ?? null;
 
 }
 
-function mapEtatToStateId(etat) {
-    const normalized = normalizeText(etat);
-    if (!normalized) return ORDER_STATE_FULL_OPTIONS[0].id;
-
-    const match = ORDER_STATE_FULL_OPTIONS.find((option) => {
-        const optionName = normalizeText(option.name);
-        return normalized === optionName || normalized.includes(optionName) || optionName.includes(normalized);
-    });
-
-    return match?.id ?? null;
-}
-
 function parseAchat(value) {
     if (!value) return [];
 
-    // Unescape CSV double-quotes ("" → ")
+    // Unescape CSV double-quotes ("" -> ")
     const unescaped = String(value).replaceAll('""', '"').trim();
+    if (!unescaped.startsWith("[") || !unescaped.endsWith("]")) return [];
 
     // Strip outer [ and ]
-    const content = unescaped.slice(1, -1);
+    const content = unescaped.slice(1, -1).trim();
+    if (!content) return [];
 
     // Split by , to get each tuple: ("T_01";3;"ngoza")
     const tuples = content.split(",");
@@ -121,19 +91,58 @@ function parseAchat(value) {
         // Split by ; to get the 3 parts: ref, qty, variant
         const [ref, qty, variant] = clean.split(";");
 
+        const quantity = Number(qty);
         return {
-            reference: ref.replaceAll('"', "").trim(),
-            quantity: Number(qty) || 1,
+            reference: ref?.replaceAll('"', "").trim(),
+            quantity: Number.isFinite(quantity) ? quantity : 1,
             variant: (variant ?? "").replaceAll('"', "").trim(),
         };
-    }).filter(Boolean);
+    }).filter((item) => item?.reference);
 }
 
-function splitCustomerName(fullName) {
-    const parts = String(fullName ?? "").trim().split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return {firstname: "Client", lastname: "Import"};
-    if (parts.length === 1) return {firstname: parts[0], lastname: parts[0]};
-    return {firstname: parts[0], lastname: parts.slice(1).join(" ")};
+function isValidEmail(value) {
+    const email = String(value ?? "").trim();
+    if (!email) return true;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+export function validateOrderRow(row) {
+    const errors = [];
+    const dateRaw = String(row?.date ?? "").trim();
+    if (!dateRaw) {
+        errors.push("Date commande manquante.");
+    } else {
+        const iso = parseDateToIso(dateRaw);
+        if (!iso) errors.push("Date commande invalide (format attendu JJ/MM/AAAA).");
+    }
+
+    if (!isValidEmail(row?.email)) {
+        errors.push("Email client invalide.");
+    }
+
+    const achatRaw = String(row?.achat ?? "").trim();
+    if (!achatRaw) {
+        errors.push("Achat manquant.");
+    } else {
+        const achats = parseAchat(achatRaw);
+        if (!achats.length) {
+            errors.push("Achat invalide ou illisible.");
+        }
+
+        const invalidQty = achats.find((item) => !Number.isFinite(item.quantity) || item.quantity <= 0);
+        if (invalidQty) {
+            errors.push("Quantite d'achat invalide (doit etre > 0).");
+        }
+    }
+
+    return errors;
+}
+
+function ensureOrderRow(row) {
+    const errors = validateOrderRow(row);
+    if (errors.length > 0) {
+        throw new Error(errors.join(" | "));
+    }
 }
 
 export async function ensureCustomerAnonym() {
@@ -153,9 +162,11 @@ export async function ensureCustomerAnonym() {
         existingAnonym = await createResource("customers", payload);
 
     }
-    const id = getScalarValue(existingAnonym?.data?.customer?.id);
+    const id =
+        getScalarValue(existingAnonym?.id) ||
+        getScalarValue(existingAnonym?.data?.customer?.id);
 
-    if (!existingAnonym) throw new Error("Anonymous not created !")
+    if (!id) throw new Error("Anonymous not created !")
     return {id: id, email: ANONYM_CUSTOMER_GMAIL, firstname: ANONYM_CUSTOMER_NAME, lastname: ANONYM_CUSTOMER_NAME}
 
 }
@@ -282,6 +293,7 @@ async function resolveCombinationId(productId, variantLabel) {
 }
 
 export async function processOrderRow(row) {
+    ensureOrderRow(row);
     const customer = await ensureCustomer(row);
     const customerId = getScalarValue(customer?.id);
     if (!customerId) return {status: "skipped", reason: "Client introuvable", details: {email: row?.email}};
@@ -386,7 +398,7 @@ export async function processOrderRow(row) {
         };
     }
 
-    const stateId = ensureState(row?.etat);
+    const stateId = await ensureState(row?.etat);
     if (!stateId) {
         throw new Error(`Etat de commande inconnu: ${row?.etat}`);
     }
@@ -448,8 +460,7 @@ export async function processOrderRow(row) {
             id: orderId,
             date_add: createdDate
         }
-
-    })
+    });
 
     // await createResource("order_histories", {
     //     order_history: {

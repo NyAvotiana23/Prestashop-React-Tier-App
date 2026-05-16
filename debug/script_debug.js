@@ -1,30 +1,19 @@
-const value = "[(\"\"T_01\"\";2;\"\"kely\"\"),(\"\"C_03\"\";1;\"\"\"\")]"
+const defaultDateAdd = new Date().toLocaleString();
 
-function parseAchat(value) {
-    if (!value) return [];
+function getDateTimeString(date = new Date()) {
+    const pad = (n) => String(n).padStart(2, '0');
 
-    // Unescape CSV double-quotes ("" → ")
-    const unescaped = String(value).replaceAll('""', '"').trim();
+    const YYYY = date.getFullYear();
+    const MM   = pad(date.getMonth() + 1); // months are 0-indexed
+    const DD   = pad(date.getDate());
+    const HH   = pad(date.getHours());
+    const min  = pad(date.getMinutes());
+    const SS   = pad(date.getSeconds());
 
-    // Strip outer [ and ]
-    const content = unescaped.slice(1, -1);
-
-    // Split by , to get each tuple: ("T_01";3;"ngoza")
-    const tuples = content.split(",");
-
-    return tuples.map(tuple => {
-        // Remove ( and ) at the edges
-        const clean = tuple.replaceAll("(", "").replaceAll(")", "");
-
-        // Split by ; to get the 3 parts: ref, qty, variant
-        const [ref, qty, variant] = clean.split(";");
-
-        return {
-            reference: ref.replaceAll('"', "").trim(),
-            quantity: Number(qty) || 1,
-            variant: (variant ?? "").replaceAll('"', "").trim(),
-        };
-    }).filter(Boolean);
+    return `${YYYY}-${MM}-${DD} ${HH}:${min}:${SS}`;
 }
 
-console.log(parseAchat(value));
+
+
+
+console.log(getDateTimeString());

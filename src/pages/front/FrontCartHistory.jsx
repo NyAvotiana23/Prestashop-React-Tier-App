@@ -238,11 +238,11 @@ function FrontCartHistory() {
                     total_products: totalPaid,
                     total_products_wt: totalPaid,
                     conversion_rate: "1",
-                    // associations: {
-                    //     order_rows: {
-                    //         order_row: orderRows,
-                    //     },
-                    // },
+                    associations: {
+                        order_rows: {
+                            order_row: orderRows,
+                        },
+                    },
                 },
             };
 

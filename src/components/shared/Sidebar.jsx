@@ -19,6 +19,7 @@ const sections = [
 			{ name: "Categories", href: "/admin/catalog/categories" },
 			{ name: "Suivi", href: "/admin/catalog/monitoring" },
 			{ name: "Stock", href: "/admin/catalog/stock_availables" },
+			{ name: "Mouvements", href: "/admin/catalog/stock_movements" },
 			{ name: "Reduction", href: "/admin/catalog/discounts" },
 		],
 	},

@@ -4,8 +4,9 @@ import {getScalarValue} from "../../utils/util-functions.js";
 import {
     ensureProductOption,
     ensureProductOptionValue,
-    findProductByReference, getTaxRateForGroup, patchStockAvailable, patchStockAvailableOnly,
+    findProductByReference, getTaxRateForGroup, patchStockAvailable,
 } from "./csvMappingUtils.js";
+import {getDateTimeString} from "../../utils/date-utils.jsx";
 
 
 /**
@@ -15,10 +16,55 @@ import {
  * @returns {Promise<{id: (string|*|string)}|{skipped: boolean}>}
  */
 
+function parseFlexibleNumber(value) {
+    const comma = parseCsvNumber(value, {decimalSeparator: ","});
+    if (comma !== "") return Number(comma);
+    const dot = parseCsvNumber(value, {decimalSeparator: "."});
+    if (dot !== "") return Number(dot);
+    return NaN;
+}
 
+export function validateCombinationRow(row) {
+    const errors = [];
+    const reference = String(row?.reference ?? "").trim();
+    if (!reference) errors.push("Reference produit manquante.");
+
+    const specificity = String(row?.specificite ?? row?.["specificité"] ?? "").trim();
+    const variantName = String(row?.karazany ?? "").trim();
+
+    if ((specificity && !variantName) || (!specificity && variantName)) {
+        errors.push("Specificite et karazany doivent etre fournis ensemble.");
+    }
+
+    const stockInitial = parseFlexibleNumber(row?.stock_initial);
+    if (!Number.isFinite(stockInitial) || stockInitial < 0) {
+        errors.push("Stock initial invalide ou negatif.");
+    }
+
+    if (specificity && variantName) {
+        const priceTtc = parseFlexibleNumber(row?.prix_vente_ttc);
+        if (!Number.isFinite(priceTtc) || priceTtc <= 0) {
+            errors.push("Prix vente TTC invalide pour une combinaison.");
+        }
+    }
+
+    return errors;
+}
+
+function ensureCombinationRow(row) {
+    const errors = validateCombinationRow(row);
+    if (errors.length > 0) {
+        throw new Error(errors.join(" | "));
+    }
+}
 
 
 export async function processCombinationRow(row) {
+    ensureCombinationRow(row);
+
+
+    const dateAdd = getDateTimeString();
+
     const reference = row?.reference?.trim();
     if (!reference) throw new Error("Reference produit manquante.");
 
@@ -35,7 +81,7 @@ export async function processCombinationRow(row) {
 
     if (!specificity || !variantName) {
         // Mettre seulement les stock available
-        await patchStockAvailableOnly(productId, stockInitial);
+        await patchStockAvailable(productId, getScalarValue(product?.wholesale_price), "0", stockInitial, dateAdd);
         return {skipped: true};
     }
 
@@ -71,7 +117,7 @@ export async function processCombinationRow(row) {
     const combinationId = getScalarValue(response?.data?.combination?.id);
 
     if (combinationId && Number.isFinite(stockInitial)) {
-        await patchStockAvailable(productId, combinationId, stockInitial);
+        await patchStockAvailable(productId, getScalarValue(product?.wholesale_price), combinationId, stockInitial, dateAdd);
     }
 
     return {id: combinationId};

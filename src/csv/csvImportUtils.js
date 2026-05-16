@@ -17,9 +17,9 @@ export function validateCsvHeaders(actualHeaders, expectedHeaders) {
   const expected = new Set((expectedHeaders ?? []).map((header) => header.trim()));
 
   const missing = [];
-  // for (const header of expected) {
-  //   if (!actual.has(header)) missing.push(header);
-  // }
+  for (const header of expected) {
+    if (!actual.has(header)) missing.push(header);
+  }
 
   return { missing };
 }

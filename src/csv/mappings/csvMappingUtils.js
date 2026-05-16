@@ -2,10 +2,104 @@ import {createResource, getList, patchResource, updateResource} from "../../api/
 import {parseCsvNumber, slugify, toLanguageNodes} from "../csvImportUtils.js";
 import {ensureArray, getLanguageText, getScalarValue} from "../../utils/util-functions.js";
 
+
 const DEFAULT_LANG_ID = "1";
 const DEFAULT_PARENT_CATEGORY = "1";
 const DEFAULT_COUNTRY_ID = "8";
 const DEFAULT_SHOP_ID = "1";
+
+const DEFAULT_EMPLOYE_ID = "1";
+
+const stockMvtReasonCache = new Map();
+
+export async function createStockMvtReason(reason) {
+    try {
+        const normalizedReason = String(reason ?? "").trim();
+        if (!normalizedReason) return "";
+
+        if (stockMvtReasonCache.has(normalizedReason)) {
+            return stockMvtReasonCache.get(normalizedReason);
+        }
+
+        const stockMvtReasonPayload = {
+            stock_movement_reason: {
+                name: toLanguageNodes(normalizedReason)
+            }
+        }
+        const reasonResponse = await createResource("stock_movement_reasons", stockMvtReasonPayload);
+        const reasonId = getScalarValue(reasonResponse?.data?.stock_movement_reason?.id);
+        if (reasonId) {
+            stockMvtReasonCache.set(normalizedReason, reasonId);
+            return reasonId;
+        }
+
+        return "";
+    } catch (e) {
+        console.log("ERROR CREATING STOCK MOUVEMENT REASON " + e.message)
+        throw e;
+
+    }
+
+}
+
+export async function createStockMvt(stockMvt, reason) {
+    try {
+        const {
+            id_product = "0",
+            id_product_attribute = "0",
+            id_currency = "1",
+            id_stock = "0",
+            id_order = "0",
+            date_add,
+            quantity = "0",
+            price_te = "0"
+        } = stockMvt;
+
+        const normalizedDate = String(date_add ?? "").trim();
+        const parsedQuantity = parseFloat(quantity);
+        if (id_product === "0" || id_stock === "0") {
+            throw new Error("Some values cannot be '0' : " + JSON.stringify(stockMvt));
+        }
+        if (!normalizedDate) {
+            throw new Error("date_add is required for stock movement.");
+        }
+        if (!Number.isFinite(parsedQuantity) || parsedQuantity === 0) {
+            throw new Error("quantity is invalid or zero : " + JSON.stringify(stockMvt));
+        }
+
+        const idStockMvtReason = await createStockMvtReason(reason);
+        if (!idStockMvtReason) {
+            throw new Error("Stock movement reason missing or not created.");
+        }
+
+        const parsedPrice = parseFloat(price_te);
+        const normalizedPrice = Number.isFinite(parsedPrice) ? parsedPrice.toFixed(6) : "0.000000";
+        const priceTeValue = parsedQuantity < 0 ? "0.000000" : normalizedPrice;
+        const stockMvtPayload = {
+            stock_movement: {
+                id_currency,
+                id_product,
+                id_product_attribute,
+                id_employee: DEFAULT_EMPLOYE_ID,
+                id_stock,
+                id_stock_mvt_reason: idStockMvtReason,
+                id_order,
+                sign: parsedQuantity >= 0 ? "1" : "-1",
+                physical_quantity: Math.abs(parsedQuantity),
+                date_add: normalizedDate,
+                price_te: priceTeValue
+            }
+        }
+
+        const stockMouvementResponse = await createResource("stock_movements", stockMvtPayload);
+        return stockMouvementResponse?.data?.stock_movement?.id;
+    } catch (e) {
+        console.log("ERROR CREATING STOCK MOUVEMENT " + e.message)
+        throw e;
+    }
+
+
+}
 
 
 export async function listAll(ref) {
@@ -203,27 +297,7 @@ export async function getTaxRateForGroup(taxRulesGroupId) {
     return parseFloat(getScalarValue(tax?.rate) ?? "0");
 }
 
-export async function patchStockAvailableOnly(productId, quantity) {
-    const response = await getList("stock_availables", {
-        display: "full",
-        filters: {id_product: productId},
-        limit: "0,1",
-    });
-
-    const stockItem = ensureArray(response?.data?.stock_availables?.stock_available ?? [])[0];
-    const stockId = getScalarValue(stockItem?.id);
-    if (!stockId) return;
-
-    await patchResource("stock_availables", stockId, {
-        stock_available: {
-            id: stockId,
-            id_product_attribute: "0",
-            quantity: String(quantity),
-        },
-    });
-}
-
-export async function patchStockAvailable(productId, combinationId, quantity) {
+export async function patchStockAvailable(productId, productWholeSalePrice , combinationId, quantity, dateAdd) {
     const response = await getList("stock_availables", {
         display: "full",
         filters: {id_product: productId, id_product_attribute: combinationId},
@@ -241,6 +315,17 @@ export async function patchStockAvailable(productId, combinationId, quantity) {
             quantity: String(quantity),
         },
     });
+
+    const stockMvt = {
+        id_product: productId,
+        id_product_attribute: combinationId,
+        id_stock: stockId,
+        date_add: dateAdd,
+        quantity,
+        price_te: productWholeSalePrice
+    }
+    await createStockMvt(stockMvt, "Import data stock !")
+
 }
 
 export async function getCustomerByEmail(email) {
