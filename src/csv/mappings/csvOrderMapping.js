@@ -1,119 +1,58 @@
+/**
+ * csvOrderMapping.js
+ *
+ * Concerns: row validation + processing for the "orders" CSV import.
+ * All lookup / ensure / create logic lives in csvMappingUtils.js.
+ * Pure helpers (normalizeText, parseAchat, splitCustomerName, isValidEmail)
+ * live in util-functions.js.
+ */
+
 import {createResource, getList, patchResource} from "../../api/prestashopCrud.js";
-import {parseDateToIso, toLanguageNodes} from "../csvImportUtils.js";
-import {ensureArray, getLanguageText, getScalarValue} from "../../utils/util-functions.js";
+import {parseDateToIso} from "../csvImportUtils.js";
+import {
+    ensureArray,
+    getLanguageText,
+    getScalarValue,
+    normalizeText,
+    isValidEmail,
+    splitCustomerName,
+    parseAchat,
+} from "../../utils/util-functions.js";
 import {
     findProductByReference,
-    getCustomerAddressId,
     getCustomerByEmail,
-    getFirstId,
+    getCustomerAddressId,
+    cacheCustomer,
+    cacheAddress,
+    getFirstCurrencyId,
+    getFirstCarrierId,
     getTaxRateForGroup,
-    listAll,
+    ensureOrderState,
+    resolveCombinationId,
+    createStockMvt,
+    DEFAULT_LANG_ID,
+    DEFAULT_COUNTRY_ID,
+    DEFAULT_CITY_NAME,
+    DEFAULT_POST_CODE,
+    DEFAULT_ANONYM_GROUP,
 } from "./csvMappingUtils.js";
 
-const DEFAULT_LANG_ID = "1";
-const DEFAULT_COUNTRY_ID = "8";
-const DEFAULT_CITY_NAME = "France";
-const DEFAULT_POST_CODE = "00111";
-const DEFAULT_STATE_COLOR = "#eeff00";
+// ─── Anonymous customer constants ─────────────────────────────────────────────
 
-
-export const ANONYM_CUSTOMER_GMAIL = "anonym@anonym.com";
+export const ANONYM_CUSTOMER_EMAIL = "anonym@anonym.com";
 export const ANONYM_CUSTOMER_NAME = "anonymous";
 export const ANONYM_CUSTOMER_PASSWORD = "anonymous";
 
-
-function normalizeText(value) {
-    // NFD stands for Canonical Decomposition. It splits precomposed characters into two code points:
-    //"é"  →  "e" + "◌́"   (U+0065 + U+0301)
-    // "ñ"  →  "n" + "◌̃"   (U+006E + U+0303)
-    // "ü"  →  "u" + "◌̈"   (U+0075 + U+0308)
-
-    //String(value ?? "")
-    //   .normalize("NFD")
-    //   .replace(/[\u0300-\u036f]/g, "")
-    //  "café"  →  "cafe"
-    //  "naïve" →  "naive"
-    //  "São"   →  "Sao"
-
-
-    return String(value ?? "")
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase()
-        .trim();
-}
-
-async function ensureState(state) {
-    const normalized = normalizeText(state);
-    const statesResponse = await getList("order_states", {
-        display: "full",
-    });
-
-    const statesResult = statesResponse?.data?.order_states?.order_state ?? [];
-    const match = statesResult.find((state) => {
-        const optionName = normalizeText(getLanguageText(state.name));
-        return normalized === optionName;
-    });
-
-    if (!match) {
-        const statePayload = {
-            order_state: {
-                name: toLanguageNodes(state),
-                color: DEFAULT_STATE_COLOR
-            }
-        }
-        const createdState = await createResource("order_states", statePayload)
-        return getScalarValue(createdState?.data?.order_state?.id);
-    }
-
-    return getScalarValue(match?.id) ?? null;
-
-}
-
-function parseAchat(value) {
-    if (!value) return [];
-
-    // Unescape CSV double-quotes ("" -> ")
-    const unescaped = String(value).replaceAll('""', '"').trim();
-    if (!unescaped.startsWith("[") || !unescaped.endsWith("]")) return [];
-
-    // Strip outer [ and ]
-    const content = unescaped.slice(1, -1).trim();
-    if (!content) return [];
-
-    // Split by , to get each tuple: ("T_01";3;"ngoza")
-    const tuples = content.split(",");
-
-    return tuples.map(tuple => {
-        // Remove ( and ) at the edges
-        const clean = tuple.replaceAll("(", "").replaceAll(")", "");
-
-        // Split by ; to get the 3 parts: ref, qty, variant
-        const [ref, qty, variant] = clean.split(";");
-
-        const quantity = Number(qty);
-        return {
-            reference: ref?.replaceAll('"', "").trim(),
-            quantity: Number.isFinite(quantity) ? quantity : 1,
-            variant: (variant ?? "").replaceAll('"', "").trim(),
-        };
-    }).filter((item) => item?.reference);
-}
-
-function isValidEmail(value) {
-    const email = String(value ?? "").trim();
-    if (!email) return true;
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
+// ─── Validation ───────────────────────────────────────────────────────────────
 
 export function validateOrderRow(row) {
     const errors = [];
+
     const dateRaw = String(row?.date ?? "").trim();
     if (!dateRaw) {
         errors.push("Date commande manquante.");
-    } else {
-        const iso = parseDateToIso(dateRaw);
-        if (!iso) errors.push("Date commande invalide (format attendu JJ/MM/AAAA).");
+    } else if (!parseDateToIso(dateRaw)) {
+        errors.push("Date commande invalide (format attendu JJ/MM/AAAA).");
     }
 
     if (!isValidEmail(row?.email)) {
@@ -127,10 +66,7 @@ export function validateOrderRow(row) {
         const achats = parseAchat(achatRaw);
         if (!achats.length) {
             errors.push("Achat invalide ou illisible.");
-        }
-
-        const invalidQty = achats.find((item) => !Number.isFinite(item.quantity) || item.quantity <= 0);
-        if (invalidQty) {
+        } else if (achats.find((item) => !Number.isFinite(item.quantity) || item.quantity <= 0)) {
             errors.push("Quantite d'achat invalide (doit etre > 0).");
         }
     }
@@ -140,52 +76,53 @@ export function validateOrderRow(row) {
 
 function ensureOrderRow(row) {
     const errors = validateOrderRow(row);
-    if (errors.length > 0) {
-        throw new Error(errors.join(" | "));
-    }
+    if (errors.length > 0) throw new Error(errors.join(" | "));
 }
 
+// ─── Customer helpers (order-domain) ─────────────────────────────────────────
+
+/**
+ * Finds or creates the anonymous customer.
+ * Cached under ANONYM_CUSTOMER_EMAIL in CUSTOMERS_CACHE.
+ */
 export async function ensureCustomerAnonym() {
-    let existingAnonym = await getCustomerByEmail(ANONYM_CUSTOMER_GMAIL);
-    if (!existingAnonym) {
+    let existing = await getCustomerByEmail(ANONYM_CUSTOMER_EMAIL);
+    if (!existing) {
         const payload = {
             customer: {
-                email: ANONYM_CUSTOMER_GMAIL,
+                email: ANONYM_CUSTOMER_EMAIL,
                 firstname: ANONYM_CUSTOMER_NAME,
                 lastname: ANONYM_CUSTOMER_NAME,
                 passwd: ANONYM_CUSTOMER_PASSWORD,
                 active: "1",
-                id_default_group: "3",
+                id_default_group: DEFAULT_ANONYM_GROUP,
                 id_gender: "1",
             },
         };
-        existingAnonym = await createResource("customers", payload);
-
+        const response = await createResource("customers", payload);
+        const created = response?.data?.customer;
+        if (created) {
+            cacheCustomer(ANONYM_CUSTOMER_EMAIL, created);
+            existing = created;
+        } else {
+            existing = await getCustomerByEmail(ANONYM_CUSTOMER_EMAIL);
+        }
     }
-    const id =
-        getScalarValue(existingAnonym?.id) ||
-        getScalarValue(existingAnonym?.data?.customer?.id);
 
-    if (!id) throw new Error("Anonymous not created !")
-    return {id: id, email: ANONYM_CUSTOMER_GMAIL, firstname: ANONYM_CUSTOMER_NAME, lastname: ANONYM_CUSTOMER_NAME}
+    const id = getScalarValue(existing?.id) || getScalarValue(existing?.data?.customer?.id);
+    if (!id) throw new Error("Anonymous customer not created!");
 
-}
-
-function splitCustomerName(name) {
-    const splited = name.split(" ");
-    if (splited.length > 1) {
-        return {firstname: splited[0], lastname: splited[1]}
-    }
-    return {firstname: name, lastname: name}
+    return {
+        id,
+        email: ANONYM_CUSTOMER_EMAIL,
+        firstname: ANONYM_CUSTOMER_NAME,
+        lastname: ANONYM_CUSTOMER_NAME,
+    };
 }
 
 async function ensureCustomer(row) {
     const email = String(row?.email ?? "").trim().toLowerCase();
-    if (!email) {
-        // Make it to the anonym person
-        return ensureCustomerAnonym();
-    }
-
+    if (!email) return ensureCustomerAnonym();
 
     const existing = await getCustomerByEmail(email);
     if (existing) return existing;
@@ -204,9 +141,15 @@ async function ensureCustomer(row) {
     };
 
     const response = await createResource("customers", payload);
-    const id = getScalarValue(response?.data?.customer?.id);
-    if (id) return {id, email, firstname, lastname};
-    return await getCustomerByEmail(email);
+    const created = response?.data?.customer;
+    const id = getScalarValue(created?.id);
+
+    if (id && created) {
+        cacheCustomer(email, created);
+        return created;
+    }
+    // Fallback: re-fetch (race condition guard)
+    return getCustomerByEmail(email);
 }
 
 async function ensureCustomerAddress(customer, row) {
@@ -219,92 +162,49 @@ async function ensureCustomerAddress(customer, row) {
     const rawAddress = String(row?.adresse ?? "").trim();
     if (!rawAddress) return "";
 
-    const firstname = getScalarValue(customer?.firstname) || splitCustomerName(row?.nom).firstname;
-    const lastname = getScalarValue(customer?.lastname) || splitCustomerName(row?.nom).lastname;
-    const city = DEFAULT_CITY_NAME;
-    const postcode = DEFAULT_POST_CODE;
-    const alias = `Addresse import ${customerId}`;
+    const {firstname, lastname} = splitCustomerName(row?.nom);
+    const resolvedFirstname = getScalarValue(customer?.firstname) || firstname;
+    const resolvedLastname = getScalarValue(customer?.lastname) || lastname;
 
     const payload = {
         address: {
             id_customer: customerId,
             id_country: DEFAULT_COUNTRY_ID,
-            alias,
-            firstname,
-            lastname,
+            alias: `Addresse import ${customerId}`,
+            firstname: resolvedFirstname,
+            lastname: resolvedLastname,
             address1: rawAddress,
             address2: "",
-            city,
-            postcode
+            city: DEFAULT_CITY_NAME,
+            postcode: DEFAULT_POST_CODE,
         },
     };
 
     const response = await createResource("addresses", payload);
     const createdId = getScalarValue(response?.data?.address?.id) || "";
-    if (createdId) return createdId;
 
+    if (createdId) {
+        cacheAddress(customerId, createdId);
+        return createdId;
+    }
+
+    // Fallback re-fetch
     const fallbackId = await getCustomerAddressId(customerId);
     if (fallbackId) return fallbackId;
 
     throw new Error(`Adresse non creee pour le client ${customerId} (adresse: ${rawAddress})`);
 }
 
-async function getProductCombinations(productId) {
-    const response = await getList("combinations", {
-        display: "full",
-        filters: {id_product: productId},
-        limit: "0,100",
-    });
-    return ensureArray(response?.data?.combinations?.combination ?? []);
-}
-
-let optionValueNameCache = null;
-
-async function getOptionValueNameMap() {
-    if (optionValueNameCache) return optionValueNameCache;
-    const values = await listAll("product_option_values");
-    optionValueNameCache = values.reduce((acc, value) => {
-        const id = getScalarValue(value?.id);
-        const name = getLanguageText(value?.name);
-        if (id) acc[id] = name || "";
-        return acc;
-    }, {});
-    return optionValueNameCache;
-}
-
-
-// Return "0" if variant "" empty
-async function resolveCombinationId(productId, variantLabel) {
-    const normalizedVariant = normalizeText(variantLabel);
-    if (!normalizedVariant) return "0";
-
-    const combinations = await getProductCombinations(productId);
-    if (!combinations.length) return null;
-
-    const optionValueMap = await getOptionValueNameMap();
-
-    for (const combo of combinations) {
-        const optionValues = ensureArray(
-            combo?.associations?.product_option_values?.product_option_value ?? []
-        );
-        const names = optionValues
-            .map((opt) => optionValueMap[getScalarValue(opt?.id || opt?.["@_id"])])
-            .filter(Boolean)
-            .map((name) => normalizeText(name));
-
-        if (names.includes(normalizedVariant)) {
-            return getScalarValue(combo?.id);
-        }
-    }
-
-    return null;
-}
+// ─── Row processing ───────────────────────────────────────────────────────────
 
 export async function processOrderRow(row) {
     ensureOrderRow(row);
+
     const customer = await ensureCustomer(row);
     const customerId = getScalarValue(customer?.id);
-    if (!customerId) return {status: "skipped", reason: "Client introuvable", details: {email: row?.email}};
+    if (!customerId) {
+        return {status: "skipped", reason: "Client introuvable", details: {email: row?.email}};
+    }
 
     const addressId = (await ensureCustomerAddress(customer, row)) || "";
     if (!addressId) {
@@ -317,15 +217,13 @@ export async function processOrderRow(row) {
 
     const achats = parseAchat(row?.achat);
     if (!achats.length) {
-        return {
-            status: "skipped",
-            reason: "Achat vide ou illisible",
-            details: {achat: row?.achat},
-        };
+        return {status: "skipped", reason: "Achat vide ou illisible", details: {achat: row?.achat}};
     }
 
-    const taxRateCache = {};
+    // Build order items — reuse tax rate cache locally across achats in one row
+    const taxRateLocalCache = {};
     const items = [];
+
     for (const achat of achats) {
         const product = await findProductByReference(achat.reference);
         if (!product) throw new Error(`Produit introuvable: ${achat.reference}`);
@@ -337,44 +235,37 @@ export async function processOrderRow(row) {
         }
 
         const taxRulesGroupId = getScalarValue(product?.id_tax_rules_group);
-        let taxRate = 0;
-        if (taxRulesGroupId) {
-            if (taxRateCache[taxRulesGroupId] === undefined) {
-                taxRateCache[taxRulesGroupId] = (await getTaxRateForGroup(taxRulesGroupId)) || 0;
-            }
-            taxRate = taxRateCache[taxRulesGroupId] || 0;
+        if (taxRulesGroupId && taxRateLocalCache[taxRulesGroupId] === undefined) {
+            taxRateLocalCache[taxRulesGroupId] = (await getTaxRateForGroup(taxRulesGroupId)) || 0;
         }
+        const taxRate = taxRulesGroupId ? (taxRateLocalCache[taxRulesGroupId] || 0) : 0;
 
         const baseHt = parseFloat(getScalarValue(product?.price) ?? "0") || 0;
-
         let effectiveHt = baseHt;
+
         if (combinationId && combinationId !== "0") {
-            const comboResponse = await getList("combinations", {
-                display: "full",
-                filters: {id: combinationId},
-                limit: "0,1",
-            });
-            const combo = ensureArray(comboResponse?.data?.combinations?.combination ?? [])[0];
+            // Combination delta — already cached in COMBINATIONS_CACHE via resolveCombinationId
+            const {getProductCombinations} = await import("./csvMappingUtils.js");
+            const combos = await getProductCombinations(productId);
+            const combo = combos.find((c) => getScalarValue(c?.id) === combinationId);
             const deltaHt = parseFloat(getScalarValue(combo?.price) ?? "0") || 0;
             effectiveHt = baseHt + deltaHt;
         }
 
         const priceTtc = parseFloat((effectiveHt * (1 + taxRate / 100)).toFixed(2));
-
         items.push({product, quantity: achat.quantity, combinationId, priceHt: effectiveHt, priceTtc});
     }
 
-    const currencyId = (await getFirstId("currencies")) || "1";
-    const carrierId = (await getFirstId("carriers")) || "1";
-    const langId = DEFAULT_LANG_ID;
-
+    const currencyId = (await getFirstCurrencyId()) || "1";
+    const carrierId = (await getFirstCarrierId()) || "1";
     const createdDate = parseDateToIso(row?.date) + " 00:00:00";
 
+    // Create cart
     const cartPayload = {
         cart: {
             id_currency: currencyId,
             id_customer: customerId,
-            id_lang: langId,
+            id_lang: DEFAULT_LANG_ID,
             id_address_delivery: addressId,
             id_address_invoice: addressId,
             id_carrier: carrierId,
@@ -393,11 +284,9 @@ export async function processOrderRow(row) {
 
     const cartResponse = await createResource("carts", cartPayload);
     const cartId = getScalarValue(cartResponse?.data?.cart?.id);
-    if (!cartId) {
-        throw new Error(`Creation du panier echouee (client: ${customerId})`);
-    }
+    if (!cartId) throw new Error(`Creation du panier echouee (client: ${customerId})`);
 
-    // Don't create order if etat is null
+    // Skip order creation if status means "in cart"
     if (!row?.etat || normalizeText(getScalarValue(row?.etat)) === normalizeText("dans le panier")) {
         return {
             status: "skipped",
@@ -406,10 +295,8 @@ export async function processOrderRow(row) {
         };
     }
 
-    const stateId = await ensureState(row?.etat);
-    if (!stateId) {
-        throw new Error(`Etat de commande inconnu: ${row?.etat}`);
-    }
+    const stateId = await ensureOrderState(row?.etat);
+    if (!stateId) throw new Error(`Etat de commande inconnu: ${row?.etat}`);
 
     const totalPaid = items
         .reduce((sum, item) => sum + item.priceTtc * item.quantity, 0)
@@ -421,7 +308,7 @@ export async function processOrderRow(row) {
             id_address_invoice: addressId,
             id_cart: cartId,
             id_currency: currencyId,
-            id_lang: langId,
+            id_lang: DEFAULT_LANG_ID,
             id_customer: customerId,
             id_carrier: carrierId,
             module: "ps_cashondelivery",
@@ -450,32 +337,40 @@ export async function processOrderRow(row) {
 
     const orderResponse = await createResource("orders", orderPayload);
     const orderId = getScalarValue(orderResponse?.data?.order?.id);
+    if (!orderId) throw new Error(`Creation de la commande echouee (cart: ${cartId})`);
 
+    // Back-date cart and order to match the CSV date
+    await patchResource("carts", cartId, {cart: {id: cartId, date_add: createdDate}});
+    await patchResource("orders", orderId, {order: {id: orderId, date_add: createdDate}});
 
-    if (!orderId) {
-        throw new Error(`Creation de la commande echouee (cart: ${cartId})`);
+    // Decrease stock for each ordered item
+    for (const item of items) {
+        const productId = getScalarValue(item.product?.id);
+        const combinationId = item.combinationId || "0";
+
+        const stockResponse = await getList("stock_availables", {
+            display: "full",
+            filters: {id_product: productId, id_product_attribute: combinationId},
+            limit: "0,1",
+        });
+        const stockItem = ensureArray(stockResponse?.data?.stock_availables?.stock_available ?? [])[0];
+        const stockId = getScalarValue(stockItem?.id);
+
+        if (stockId) {
+            await createStockMvt(
+                {
+                    id_product: productId,
+                    id_product_attribute: combinationId,
+                    id_stock: stockId,
+                    id_order: orderId,
+                    date_add: createdDate,
+                    quantity: -item.quantity,   // negative = decrease
+                    price_te: item.priceHt.toFixed(6),
+                },
+                "Commande client"
+            );
+        }
     }
-    // update dates :
-    await patchResource("carts", cartId, {
-        cart: {
-            id: cartId,
-            date_add: createdDate
-        }
-
-    })
-    await patchResource("orders", orderId, {
-        order: {
-            id: orderId,
-            date_add: createdDate
-        }
-    });
-
-    // await createResource("order_histories", {
-    //     order_history: {
-    //         id_order: orderId,
-    //         id_order_state: stateId,
-    //     },
-    // });
 
     return {
         status: "created",

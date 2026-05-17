@@ -2,6 +2,7 @@ import {useEffect, useState} from "react";
 import {useNavigate} from "react-router-dom";
 import {createResource, getList} from "../../api/prestashopCrud.js";
 import {ensureArray, getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
+import {getDateTimeString} from "../../utils/date-utils.jsx";
 import StatusBanner from "../../components/shared/StatusBanner.jsx";
 import {useCustomerUser} from "../../hooks/useCustomerUser.jsx";
 
@@ -103,6 +104,115 @@ async function findOrderByCartId(cartId) {
     };
 }
 
+// ─── Stock movement helpers ───────────────────────────────────────────────────
+
+async function ensureStockMvtReason(reason) {
+    const name = String(reason ?? "").trim();
+    if (!name) return "";
+
+    const listResponse = await getList("stock_movement_reasons", {
+        display: "full",
+        limit: "0,50",
+    });
+    const items = ensureArray(
+        listResponse?.data?.stock_movement_reasons?.stock_movement_reason ?? []
+    );
+    const match = items.find(
+        (r) => getLanguageText(r?.name)?.toLowerCase() === name.toLowerCase()
+    );
+    if (match) return getScalarValue(match?.id);
+
+    const response = await createResource("stock_movement_reasons", {
+        stock_movement_reason: {
+            name: [{attrs: {"@_id": "1"}, value: name}],
+        },
+    });
+    return getScalarValue(response?.data?.stock_movement_reason?.id) ?? "";
+}
+
+async function createStockMvt(stockMvt, reason) {
+    const {
+        id_product = "0",
+        id_product_attribute = "0",
+        id_currency = "1",
+        id_stock = "0",
+        id_order = "0",
+        date_add,
+        quantity = 0,
+        price_te = "0",
+    } = stockMvt;
+
+    if (id_product === "0" || id_stock === "0") {
+        throw new Error("createStockMvt: id_product and id_stock cannot be '0'");
+    }
+
+    const normalizedDate = String(date_add ?? "").trim();
+    if (!normalizedDate) throw new Error("createStockMvt: date_add is required.");
+
+    const parsedQty = Number(quantity);
+    if (!Number.isFinite(parsedQty) || parsedQty === 0) {
+        throw new Error("createStockMvt: quantity is invalid or zero.");
+    }
+
+    const reasonId = await ensureStockMvtReason(reason);
+    if (!reasonId) throw new Error("createStockMvt: stock movement reason could not be found or created.");
+
+    const parsedPrice = parseFloat(price_te);
+    const priceTeValue = parsedQty < 0
+        ? "0.000000"
+        : (Number.isFinite(parsedPrice) ? parsedPrice.toFixed(6) : "0.000000");
+
+    await createResource("stock_movements", {
+        stock_movement: {
+            id_currency,
+            id_product,
+            id_product_attribute,
+            id_employee: "1",
+            id_stock,
+            id_stock_mvt_reason: reasonId,
+            id_order,
+            sign: parsedQty >= 0 ? "1" : "-1",
+            physical_quantity: Math.abs(parsedQty),
+            date_add: normalizedDate,
+            price_te: priceTeValue,
+        },
+    });
+}
+
+async function recordStockMvtForOrderRow({productId, combinationId, orderId, quantity, priceHt, dateAdd}) {
+    const stockResponse = await getList("stock_availables", {
+        display: "full",
+        filters: {
+            id_product: productId,
+            id_product_attribute: combinationId || "0",
+        },
+        limit: "0,1",
+    });
+
+    const stockItem = ensureArray(
+        stockResponse?.data?.stock_availables?.stock_available ?? []
+    )[0];
+    const stockId = getScalarValue(stockItem?.id);
+
+    if (!stockId) {
+        console.warn(`recordStockMvtForOrderRow: no stock_available found for product ${productId} / combo ${combinationId}`);
+        return;
+    }
+
+    await createStockMvt(
+        {
+            id_product: productId,
+            id_product_attribute: combinationId || "0",
+            id_stock: stockId,
+            id_order: orderId,
+            date_add: dateAdd,
+            quantity: -Math.abs(quantity),
+            price_te: String(priceHt ?? "0"),
+        },
+        "Commande client"
+    );
+}
+
 function FrontCartHistory() {
     const {customerUser} = useCustomerUser();
     const [status, setStatus] = useState("idle");
@@ -149,7 +259,7 @@ function FrontCartHistory() {
 
     async function buildOrderRowsFromCart(cart) {
         const cartRows = getCartRows(cart);
-        const orderRows = await Promise.all(
+        const enrichedRows = await Promise.all(
             cartRows.map(async (row) => {
                 const productId = getScalarValue(row?.id_product);
                 const combinationId = getScalarValue(row?.id_product_attribute) || "0";
@@ -168,8 +278,17 @@ function FrontCartHistory() {
                     product_price: pricing.priceTtc.toFixed(6),
                     unit_price_tax_incl: pricing.priceTtc.toFixed(6),
                     unit_price_tax_excl: pricing.priceHt.toFixed(6),
+                    // kept for stock movement (stripped before sending to API)
+                    _productId: productId,
+                    _combinationId: combinationId,
+                    _quantity: quantity,
+                    _priceHt: pricing.priceHt,
                 };
             })
+        );
+
+        const orderRows = enrichedRows.map(
+            ({_productId, _combinationId, _quantity, _priceHt, ...apiFields}) => apiFields
         );
 
         const totalPaid = orderRows
@@ -179,7 +298,7 @@ function FrontCartHistory() {
             )
             .toFixed(6);
 
-        return {orderRows, totalPaid};
+        return {orderRows, totalPaid, enrichedRows};
     }
 
     async function handleValidateCart(cart) {
@@ -220,7 +339,7 @@ function FrontCartHistory() {
             const langId = getScalarValue(cart?.id_lang) || "1";
             const customerId = getScalarValue(cart?.id_customer);
 
-            const {orderRows, totalPaid} = await buildOrderRowsFromCart(cart);
+            const {orderRows, totalPaid, enrichedRows} = await buildOrderRowsFromCart(cart);
 
             const orderPayload = {
                 order: {
@@ -248,6 +367,26 @@ function FrontCartHistory() {
 
             const orderResponse = await createResource("orders", orderPayload);
             const orderId = getScalarValue(orderResponse?.data?.order?.id);
+
+            // Record a stock decrement movement for each ordered line
+            const dateAdd = getDateTimeString();
+            for (const row of enrichedRows) {
+                try {
+                    await recordStockMvtForOrderRow({
+                        productId: row._productId,
+                        combinationId: row._combinationId,
+                        orderId: orderId || "0",
+                        quantity: row._quantity,
+                        priceHt: row._priceHt,
+                        dateAdd,
+                    });
+                } catch (err) {
+                    console.error(
+                        `Stock movement failed for product ${row._productId} / combo ${row._combinationId}:`,
+                        err
+                    );
+                }
+            }
 
             setSuccess(`Commande creee (ID: ${orderId || "?"}).`);
             setStatus("success");
@@ -326,4 +465,3 @@ function FrontCartHistory() {
 }
 
 export default FrontCartHistory;
-

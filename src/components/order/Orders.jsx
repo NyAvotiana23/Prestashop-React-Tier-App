@@ -2,8 +2,9 @@ import React, {useEffect, useState} from "react";
 import {Link} from "react-router-dom";
 import Loading from "../shared/Loading.jsx";
 import StatusBanner from "../shared/StatusBanner.jsx";
-import {createResource, deleteResource, getList, updateResource} from "../../api/prestashopCrud.js";
+import {createResource, deleteResource, getList, patchResource, updateResource} from "../../api/prestashopCrud.js";
 import {ensureArray, formatMoney, getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
+import {getDateTimeString} from "../../utils/date-utils.jsx";
 
 // ─── State definitions ────────────────────────────────────────────────────────
 
@@ -162,10 +163,160 @@ async function getProductPricing(productId, combinationId) {
     return {priceHt: effectiveHt, priceTtc, product};
 }
 
+// ─── Stock movement helpers ───────────────────────────────────────────────────
+
+/**
+ * Finds or creates a stock_movement_reason by name.
+ * Returns the reason id string.
+ */
+async function ensureStockMvtReason(reason) {
+    const name = String(reason ?? "").trim();
+    if (!name) return "";
+
+    // Try to find an existing reason with this exact name first
+    const listResponse = await getList("stock_movement_reasons", {
+        display: "full",
+        limit: "0,50",
+    });
+    const items = ensureArray(
+        listResponse?.data?.stock_movement_reasons?.stock_movement_reason ?? []
+    );
+    const match = items.find(
+        (r) => getLanguageText(r?.name)?.toLowerCase() === name.toLowerCase()
+    );
+    if (match) return getScalarValue(match?.id);
+
+    // Create it — name must be a language node for PrestaShop
+    const response = await createResource("stock_movement_reasons", {
+        stock_movement_reason: {
+            name: [{attrs: {"@_id": "1"}, value: name}],
+        },
+    });
+    return getScalarValue(response?.data?.stock_movement_reason?.id) ?? "";
+}
+
+/**
+ * Creates a stock_movement record that decrements stock for one order line.
+ *
+ * @param {{
+ *   id_product: string,
+ *   id_product_attribute: string,
+ *   id_stock: string,
+ *   id_order: string,
+ *   date_add: string,   // "YYYY-MM-DD HH:mm:SS"
+ *   quantity: number,   // negative = decrease
+ *   price_te: string,
+ * }} stockMvt
+ * @param {string} reason  Human-readable reason label
+ */
+async function createStockMvt(stockMvt, reason) {
+    const {
+        id_product = "0",
+        id_product_attribute = "0",
+        id_currency = "1",
+        id_stock = "0",
+        id_order = "0",
+        date_add,
+        quantity = 0,
+        price_te = "0",
+    } = stockMvt;
+
+    if (id_product === "0" || id_stock === "0") {
+        throw new Error(
+            "createStockMvt: id_product and id_stock cannot be '0' — " +
+            JSON.stringify(stockMvt)
+        );
+    }
+
+    const normalizedDate = String(date_add ?? "").trim();
+    if (!normalizedDate) {
+        throw new Error("createStockMvt: date_add is required.");
+    }
+
+    const parsedQty = Number(quantity);
+    if (!Number.isFinite(parsedQty) || parsedQty === 0) {
+        throw new Error("createStockMvt: quantity is invalid or zero — " + JSON.stringify(stockMvt));
+    }
+
+    const reasonId = await ensureStockMvtReason(reason);
+    if (!reasonId) throw new Error("createStockMvt: stock movement reason could not be found or created.");
+
+    const parsedPrice = parseFloat(price_te);
+    const normalizedPrice = Number.isFinite(parsedPrice) ? parsedPrice.toFixed(6) : "0.000000";
+    // price_te is 0 for outgoing movements (negative qty)
+    const priceTeValue = parsedQty < 0 ? "0.000000" : normalizedPrice;
+
+    await createResource("stock_movements", {
+        stock_movement: {
+            id_currency,
+            id_product,
+            id_product_attribute,
+            id_employee: "1",
+            id_stock,
+            id_stock_mvt_reason: reasonId,
+            id_order,
+            sign: parsedQty >= 0 ? "1" : "-1",
+            physical_quantity: Math.abs(parsedQty),
+            date_add: normalizedDate,
+            price_te: priceTeValue,
+        },
+    });
+}
+
+/**
+ * Fetches the stock_available record for a product/combination and registers
+ * a stock movement for the given order quantity (negative = decrement).
+ *
+ * Does NOT patch stock_availables — PrestaShop handles the quantity decrement
+ * internally when the order is created. We only add the movement audit record.
+ */
+async function recordStockMvtForOrderRow({
+                                             productId,
+                                             combinationId,
+                                             orderId,
+                                             quantity,
+                                             priceHt,
+                                             dateAdd,
+                                         }) {
+    const stockResponse = await getList("stock_availables", {
+        display: "full",
+        filters: {
+            id_product: productId,
+            id_product_attribute: combinationId || "0",
+        },
+        limit: "0,1",
+    });
+
+    const stockItem = ensureArray(
+        stockResponse?.data?.stock_availables?.stock_available ?? []
+    )[0];
+    const stockId = getScalarValue(stockItem?.id);
+
+    if (!stockId) {
+        console.warn(
+            `recordStockMvtForOrderRow: no stock_available found for product ${productId} / combo ${combinationId}`
+        );
+        return;
+    }
+
+    await createStockMvt(
+        {
+            id_product: productId,
+            id_product_attribute: combinationId || "0",
+            id_stock: stockId,
+            id_order: orderId,
+            date_add: dateAdd,
+            quantity: -Math.abs(quantity),   // always a decrease
+            price_te: String(priceHt ?? "0"),
+        },
+        "Commande client"
+    );
+}
+
 async function buildOrderRowsFromCart(cart) {
     const cartRows = getCartRows(cart);
 
-    const orderRows = await Promise.all(
+    const enrichedRows = await Promise.all(
         cartRows.map(async (row) => {
             const productId = getScalarValue(row?.id_product);
             const combinationId = getScalarValue(row?.id_product_attribute) || "0";
@@ -176,6 +327,7 @@ async function buildOrderRowsFromCart(cart) {
             const reference = getScalarValue(pricing.product?.reference) || "";
 
             return {
+                // API payload fields
                 product_id: productId,
                 product_attribute_id: combinationId,
                 product_quantity: quantity,
@@ -184,9 +336,16 @@ async function buildOrderRowsFromCart(cart) {
                 product_price: pricing.priceTtc.toFixed(6),
                 unit_price_tax_incl: pricing.priceTtc.toFixed(6),
                 unit_price_tax_excl: pricing.priceHt.toFixed(6),
+                // Kept for stock movement recording (not sent to order_rows)
+                _productId: productId,
+                _combinationId: combinationId,
+                _quantity: quantity,
+                _priceHt: pricing.priceHt,
             };
         })
     );
+
+    const orderRows = enrichedRows.map(({_productId, _combinationId, _quantity, _priceHt, ...apiFields}) => apiFields);
 
     const totalPaid = orderRows
         .reduce(
@@ -196,7 +355,7 @@ async function buildOrderRowsFromCart(cart) {
         )
         .toFixed(6);
 
-    return {orderRows, totalPaid};
+    return {orderRows, totalPaid, enrichedRows};
 }
 
 /**
@@ -218,7 +377,7 @@ async function createOrderFromCart(cart, targetStateId) {
     const langId = getScalarValue(cart?.id_lang) || "1";
     const customerId = getScalarValue(cart?.id_customer);
 
-    const {orderRows, totalPaid} = await buildOrderRowsFromCart(cart);
+    const {orderRows, totalPaid, enrichedRows} = await buildOrderRowsFromCart(cart);
 
     const orderPayload = {
         order: {
@@ -256,6 +415,27 @@ async function createOrderFromCart(cart, targetStateId) {
             id_order_state: targetStateId,
         },
     });
+
+    // Record a stock decrement movement for each ordered line
+    const dateAdd = getDateTimeString();
+    for (const row of enrichedRows) {
+        try {
+            await recordStockMvtForOrderRow({
+                productId: row._productId,
+                combinationId: row._combinationId,
+                orderId,
+                quantity: row._quantity,
+                priceHt: row._priceHt,
+                dateAdd,
+            });
+        } catch (err) {
+            // Non-fatal: log and continue so the order itself is not rolled back
+            console.error(
+                `Stock movement failed for product ${row._productId} / combo ${row._combinationId}:`,
+                err
+            );
+        }
+    }
 
     return orderId;
 }
@@ -359,6 +539,46 @@ function Orders() {
             setUpdatingId(orderId);
             setUpdateError(null);
             try {
+                // ── Fetch full order to retrieve its rows ──────────────────────
+                const orderResponse = await getList("orders", {
+                    display: "full",
+                    filters: { id: orderId },
+                    limit: "0,1",
+                });
+                const order = ensureArray(
+                    orderResponse?.data?.orders?.order ?? []
+                )[0];
+                const orderRowsList = ensureArray(
+                    order?.associations?.order_rows?.order_row ?? []
+                );
+                const dateAdd = getDateTimeString();
+
+                // ── Record a stock increase for each order row ─────────────────
+                for (const row of orderRowsList) {
+                    const productId     = getScalarValue(row?.product_id);
+                    const combinationId = getScalarValue(row?.product_attribute_id) || "0";
+                    const quantity      = Number(getScalarValue(row?.product_quantity) ?? 0);
+                    const priceHt       = getScalarValue(row?.unit_price_tax_excl) || "0";
+
+                    if (!productId || !quantity) continue;
+                    try {
+                        await recordStockMvtForOrderRow({
+                            productId,
+                            combinationId,
+                            orderId,
+                            quantity,
+                            priceHt,
+                            dateAdd,
+                            sign: 1,               // increase
+                        });
+                    } catch (err) {
+                        console.error(
+                            `Stock revert failed for product ${productId} / combo ${combinationId}:`,
+                            err
+                        );
+                    }
+                }
+
                 await deleteResource("orders", orderId);
                 setOrders((prev) => prev.filter((o) => getScalarValue(o?.id) !== orderId));
                 setSuccessMessage(`Commande #${orderId} supprimée — panier restauré.`);
@@ -367,7 +587,6 @@ function Orders() {
             } finally {
                 setUpdatingId(null);
                 window.location.reload();
-
             }
             return;
         }

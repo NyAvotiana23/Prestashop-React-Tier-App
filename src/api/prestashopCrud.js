@@ -1,9 +1,5 @@
-import {getJson, prestashopRequest, sendJson, buildFullUrl} from "./prestashopApi";
-import {
-    buildApiErrorPayload,
-    buildApiSuccessPayload,
-    emitApiResponse,
-} from "./api-response-handler";
+import {buildFullUrl, getJson, prestashopRequest, sendJson} from "./prestashopApi";
+import {buildApiErrorPayload, buildApiSuccessPayload, emitApiResponse,} from "./api-response-handler";
 
 function normalizeRef(ref) {
     if (!ref || typeof ref !== "string") {
@@ -45,10 +41,14 @@ function buildListParams(options = {}) {
  * never accidentally pick up IDs from nested associations or other fields.
  */
 function parseIdsFromListData(data, ref) {
+    console.log(JSON.stringify(data) + " REF : " + ref);
+    if (ref === "stock_movements") {
+        ref = "stock_mvts";
+    }
+
     if (!data || typeof data !== "object") return [];
 
-    const root = data?.prestashop ?? data;
-    const listWrapper = root?.[ref];
+    const listWrapper = data?.[ref];
 
     if (!listWrapper) return [];
 
@@ -146,7 +146,7 @@ export function patchResource(ref, id, data, options = {}) {
 export async function deleteResource(ref, id, options = {}) {
 
     const normalizedRef = normalizeRef(ref);
-
+    console.log("Ref  " + ref + " Id : " + id);
 
     if (id === undefined || id === null || id === "") {
         throw new Error("id is required for deleteResource");

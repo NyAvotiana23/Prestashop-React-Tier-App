@@ -1,7 +1,6 @@
 import {useEffect, useRef, useState} from "react";
 import {useLocation, useNavigate} from "react-router-dom";
 import {useCustomerUser} from "../../hooks/useCustomerUser.jsx";
-import {ANONYM_CUSTOMER_GMAIL} from "../../csv/mappings/csvOrderMapping.js";
 
 
 

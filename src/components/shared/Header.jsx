@@ -1,9 +1,15 @@
 import {Link} from "react-router-dom";
 import useAdminUser from "../../hooks/useAdminUser.jsx";
+import {clearAllCaches} from "../../csv/mappings/cache.js";
 
 function Header() {
     const {adminUser, logout} = useAdminUser();
 
+    function clearCache () {
+        if (!window.confirm("Clear all cache ?")) return;
+        clearAllCaches();
+        alert("Cache cleared ! ");
+    }
     return (
         <header className="border-b border-zinc-800 bg-zinc-950/95">
             <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-5 lg:px-6">
@@ -36,6 +42,12 @@ function Header() {
                         </Link>
                     )}
 
+                    <button
+                        onClick={clearCache}
+                        className="inline-flex items-center gap-2 rounded-full border border-yellow-400/70 bg-yellow-400/10 px-4 py-2 text-sm font-semibold text-yellow-300 transition hover:bg-yellow-400/20"
+                    >
+                        Clear cache
+                    </button>
                     <Link
                         to="/admin/reset-database"
                         className="inline-flex items-center gap-2 rounded-full border border-yellow-400/70 bg-yellow-400/10 px-4 py-2 text-sm font-semibold text-yellow-300 transition hover:bg-yellow-400/20"

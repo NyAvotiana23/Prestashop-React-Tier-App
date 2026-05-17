@@ -78,7 +78,6 @@ function ResetDatabase() {
             setIsSubmitting(true);
             setLastReport(null);
             const report = await resetDatabase(refs);
-            clearAllCaches();
             setLastReport(report);
 
             const summary = summarizeReport(report);
@@ -92,6 +91,7 @@ function ResetDatabase() {
             alert("Echec de la reinitialisation. Verifiez la console.");
         } finally {
             setIsSubmitting(false);
+            clearAllCaches();
         }
     }
 

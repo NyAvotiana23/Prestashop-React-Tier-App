@@ -1,9 +1,10 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {useCustomerUser} from "../../hooks/useCustomerUser.jsx";
 import {useLocation, useNavigate} from "react-router-dom";
-import {ANONYM_CUSTOMER_GMAIL, ensureCustomerAnonym} from "../../csv/mappings/csvOrderMapping.js";
+import { ensureCustomerAnonym} from "../../csv/mappings/csvOrderMapping.js";
 import {getList} from "../../api/prestashopCrud.js";
 import {ensureArray, getScalarValue} from "../../utils/util-functions.js";
+import {ANONYM_CUSTOMER_EMAIL} from "../../csv/mappings/csvOrderMapping.js";
 
 function normalizeCustomers(data) {
     if (!data || typeof data !== "object") return [];
@@ -18,7 +19,7 @@ function FrontSelectUser(props) {
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
     const location = useLocation();
-    const selectRef = useRef(ANONYM_CUSTOMER_GMAIL);
+    const selectRef = useRef(ANONYM_CUSTOMER_EMAIL);
     const redirectTo = location.state?.from?.pathname ?? "/products";
 
     useEffect(() => {
@@ -45,7 +46,7 @@ function FrontSelectUser(props) {
 
         try {
             const email = selectRef.current.value;
-            if (email === ANONYM_CUSTOMER_GMAIL) {
+            if (email === ANONYM_CUSTOMER_EMAIL) {
                 await ensureCustomerAnonym();
             }
             const result = await login(email);
@@ -78,7 +79,7 @@ function FrontSelectUser(props) {
 
                                 className="rounded border border-gray-200 bg-white px-2 py-1 text-xs disabled:opacity-50"
                             >
-                                <option value={ANONYM_CUSTOMER_GMAIL}>Anonyme</option>
+                                <option value={ANONYM_CUSTOMER_EMAIL}>Anonyme</option>
                                 {customers.map((c) =>
                                     <option key={getScalarValue(c?.id)}
                                             value={getScalarValue(c?.email)}>{getScalarValue(c?.email)}</option>
