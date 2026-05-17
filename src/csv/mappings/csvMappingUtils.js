@@ -12,6 +12,108 @@ const DEFAULT_EMPLOYE_ID = "1";
 
 const stockMvtReasonCache = new Map();
 
+const categoryCache = new Map();
+const productCache = new Map();
+
+const STOCK_MOVEMENT_REASONS = [
+    {
+        "id": 1,
+        "sign": "1",
+        "deleted": "0",
+        "date_add": "2026-05-07 12:45:05",
+        "date_upd": "2026-05-07 12:45:05",
+        "name": "Augmentation"
+    },
+    {
+        "id": 2,
+        "sign": "-1",
+        "deleted": "0",
+        "date_add": "2026-05-07 12:45:05",
+        "date_upd": "2026-05-07 12:45:05",
+        "name": "Diminution"
+    },
+    {
+        "id": 3,
+        "sign": "-1",
+        "deleted": "0",
+        "date_add": "2026-05-07 12:45:05",
+        "date_upd": "2026-05-07 12:45:05",
+        "name": "Commande client"
+    },
+    {
+        "id": 4,
+        "sign": "-1",
+        "deleted": "0",
+        "date_add": "2026-05-07 12:45:05",
+        "date_upd": "2026-05-07 12:45:05",
+        "name": "Regulation following an inventory of stock"
+    },
+    {
+        "id": 5,
+        "sign": "1",
+        "deleted": "0",
+        "date_add": "2026-05-07 12:45:05",
+        "date_upd": "2026-05-07 12:45:05",
+        "name": "Regulation following an inventory of stock"
+    },
+    {
+        "id": 6,
+        "sign": "-1",
+        "deleted": "0",
+        "date_add": "2026-05-07 12:45:05",
+        "date_upd": "2026-05-07 12:45:05",
+        "name": "Transfert vers un autre entrepôt"
+    },
+    {
+        "id": 7,
+        "sign": "1",
+        "deleted": "0",
+        "date_add": "2026-05-07 12:45:05",
+        "date_upd": "2026-05-07 12:45:05",
+        "name": "Transfert depuis un autre entrepôt"
+    },
+    {
+        "id": 8,
+        "sign": "1",
+        "deleted": "0",
+        "date_add": "2026-05-07 12:45:05",
+        "date_upd": "2026-05-07 12:45:05",
+        "name": "Commande fournisseur"
+    },
+    {
+        "id": 9,
+        "sign": "1",
+        "deleted": "0",
+        "date_add": "2026-05-07 12:45:05",
+        "date_upd": "2026-05-07 12:45:05",
+        "name": "Commande client"
+    },
+    {
+        "id": 10,
+        "sign": "1",
+        "deleted": "0",
+        "date_add": "2026-05-07 12:45:05",
+        "date_upd": "2026-05-07 12:45:05",
+        "name": "Retour produit"
+    },
+    {
+        "id": 11,
+        "sign": "1",
+        "deleted": "0",
+        "date_add": "2026-05-07 12:45:05",
+        "date_upd": "2026-05-07 12:45:05",
+        "name": "Employee Edition"
+    },
+    {
+        "id": 12,
+        "sign": "-1",
+        "deleted": "0",
+        "date_add": "2026-05-07 12:45:05",
+        "date_upd": "2026-05-07 12:45:05",
+        "name": "Employee Edition"
+    }
+];
+
 export async function createStockMvtReason(reason) {
     try {
         const normalizedReason = String(reason ?? "").trim();
@@ -136,7 +238,7 @@ export async function ensureCategory(name) {
     );
 
     const categoriesData = categoriesResponse?.data?.categories?.category ?? [];
-    console.log("Categories response " +  categoriesResponse)
+    console.log("Categories response " + categoriesResponse)
     console.log("Norm : " + normalizedName);
     console.log("Categories data : " + categoriesData);
 
@@ -297,7 +399,7 @@ export async function getTaxRateForGroup(taxRulesGroupId) {
     return parseFloat(getScalarValue(tax?.rate) ?? "0");
 }
 
-export async function patchStockAvailable(productId, productWholeSalePrice , combinationId, quantity, dateAdd) {
+export async function patchStockAvailable(productId, productWholeSalePrice, combinationId, quantity, dateAdd) {
     const response = await getList("stock_availables", {
         display: "full",
         filters: {id_product: productId, id_product_attribute: combinationId},

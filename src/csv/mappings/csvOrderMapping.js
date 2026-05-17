@@ -171,6 +171,14 @@ export async function ensureCustomerAnonym() {
 
 }
 
+function splitCustomerName(name) {
+    const splited = name.split(" ");
+    if (splited.length > 1) {
+        return {firstname: splited[0], lastname: splited[1]}
+    }
+    return {firstname: name, lastname: name}
+}
+
 async function ensureCustomer(row) {
     const email = String(row?.email ?? "").trim().toLowerCase();
     if (!email) {

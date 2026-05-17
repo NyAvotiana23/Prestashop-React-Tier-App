@@ -5,6 +5,7 @@ import {CSV_IMPORT_CONFIGS} from "../csv/csvImportConfig.js";
 import {importCsvResource} from "../csv/csvImporter.js";
 import {parseCsvText} from "../csv/csvImportUtils.js";
 import {importImagesFromZip} from "../csv/mappings/imageMappingZip.js";
+import {clearAllCaches} from "../csv/mappings/cache.js";
 
 function ImportDatabase() {
     const importRows = [
@@ -161,6 +162,7 @@ function ImportDatabase() {
             }));
         } finally {
             setImportingByRef((prev) => ({...prev, [ref]: false}));
+            clearAllCaches();
         }
     }
 

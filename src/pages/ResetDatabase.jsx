@@ -1,10 +1,12 @@
 import {useState} from 'react';
 import {API_URLS} from "../constants/apiData.js";
 import {resetDatabase} from "../api/prestashopCrud.js";
+import {clearAllCaches} from "../csv/mappings/cache.js";
 
 const RESET_PRIORITY = [
     {ref: "customers", priority: 0},
     {ref: "products", priority: 0},
+    {ref: "stock_movements", priority: 0},
     {ref: "categories", priority: 0},
     {ref: "orders", priority: 1},
     {ref: "order_details", priority: 1},
@@ -76,6 +78,7 @@ function ResetDatabase() {
             setIsSubmitting(true);
             setLastReport(null);
             const report = await resetDatabase(refs);
+            clearAllCaches();
             setLastReport(report);
 
             const summary = summarizeReport(report);
