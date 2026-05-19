@@ -2,6 +2,8 @@ import { Link } from "react-router-dom";
 
 const sections = [
 	{ title: "Dashboard", href: "/admin", items: [] },
+    { title: "Statistique", href: "/admin/statistics", items: [] },
+
 	{
 		title: "Commandes",
 		items: [
@@ -20,6 +22,7 @@ const sections = [
 			// { name: "Suivi", href: "/admin/catalog/monitoring" },
 			{ name: "Stock", href: "/admin/catalog/stock_availables" },
 			{ name: "Mouvements", href: "/admin/catalog/stock_movements" },
+            { name: "Manage Stock", href: "/admin/catalog/manage_stock" },
 			// { name: "Reduction", href: "/admin/catalog/discounts" },
 		],
 	},

@@ -222,6 +222,11 @@ function buildOrderStats(orders) {
     };
 }
 
+function isValidOrder(order, validStates) {
+    const state = String(getScalarValue(order?.current_state) ?? "");
+    return validStates.has(state);
+}
+
 /**
  * Collect unique order dates (YYYY-MM-DD), sorted descending.
  * Used to populate the "Available dates" dropdown.
@@ -238,6 +243,7 @@ function collectOrderDates(orders) {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TODAY = new Date().toLocaleDateString('en-CA');
+const VALID_ORDER_STATES = new Set(["2", "5", "11"]);
 
 /** Placeholder shown while async cart pricing is in progress. */
 const EMPTY_CART_STATS = {count: 0, value_ttc: 0, value_ht: 0};
@@ -348,6 +354,11 @@ function Dashboard() {
     // ── Order stats (synchronous) ─────────────────────────────────────────────
 
     const orderStats = useMemo(() => buildOrderStats(filteredOrders), [filteredOrders]);
+    const validOrders = useMemo(
+        () => filteredOrders.filter((order) => isValidOrder(order, VALID_ORDER_STATES)),
+        [filteredOrders]
+    );
+    const validOrderStats = useMemo(() => buildOrderStats(validOrders), [validOrders]);
 
     // ── Initial data load ─────────────────────────────────────────────────────
 
@@ -528,6 +539,15 @@ function Dashboard() {
                     <StatCard label="Total paid real" value={formatMoney(orderStats.total_paid_real)} colorClass="bg-green-50"  textClass="text-green-700"  />
                     <StatCard label="Tax incl."       value={formatMoney(orderStats.total_tax_incl)}  colorClass="bg-purple-50" textClass="text-purple-700" />
                     <StatCard label="Tax excl."       value={formatMoney(orderStats.total_tax_excl)}  colorClass="bg-orange-50" textClass="text-orange-700" />
+                </StatSection>
+
+                {/* — Valid orders — */}
+                <StatSection title="Commandes validées (2, 5, 11)">
+                    <StatCard label="Total valid"    value={validOrderStats.count}                        colorClass="bg-gray-50"   textClass="text-gray-800"   />
+                    <StatCard label="Total paid"     value={formatMoney(validOrderStats.total_paid)}      colorClass="bg-blue-50"   textClass="text-blue-700"   />
+                    <StatCard label="Total paid real" value={formatMoney(validOrderStats.total_paid_real)} colorClass="bg-green-50"  textClass="text-green-700"  />
+                    <StatCard label="Tax incl."      value={formatMoney(validOrderStats.total_tax_incl)}  colorClass="bg-purple-50" textClass="text-purple-700" />
+                    <StatCard label="Tax excl."      value={formatMoney(validOrderStats.total_tax_excl)}  colorClass="bg-orange-50" textClass="text-orange-700" />
                 </StatSection>
 
                 {/* — Cart only (no order yet) — */}

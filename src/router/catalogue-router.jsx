@@ -4,6 +4,7 @@ import ProductDetail from "../components/product/ProductDetail.jsx";
 import {customerRoutes} from "./customer-router.jsx";
 import StockAvailable from "../components/stock/StockAvailable.jsx";
 import StockMovements from "../components/stock/StockMovements.jsx";
+import ManageStock from "../components/stock/ManageStock.jsx";
 
 export const catalogRoutes = {
     path: "catalog",
@@ -11,6 +12,7 @@ export const catalogRoutes = {
         {path: "products", element: <Products/>},
         {path: "stock_availables", element: <StockAvailable/>},
         {path: "stock_movements", element: <StockMovements/>},
+        {path: "manage_stock", element: <ManageStock/>},
         {path: "products/:productId", element: <ProductDetail/>},
     ],
 };

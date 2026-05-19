@@ -1,3 +1,23 @@
+# Image management
+
+## FR (notes app)
+
+- Import ZIP dans l'UI admin: `ImportDatabase`.
+- Nom de fichier requis: `{reference}.{ext}` (reference produit uniquement).
+- Extensions acceptees: jpg, jpeg, png, webp, gif, bmp.
+- Les sous-dossiers et `__MACOSX` sont ignores.
+- Upload via `POST /api/images/products/{productId}`.
+
+## EN (app notes)
+
+- ZIP import in the admin UI: `ImportDatabase`.
+- Required filename: `{reference}.{ext}` (product reference only).
+- Supported extensions: jpg, jpeg, png, webp, gif, bmp.
+- Nested folders and `__MACOSX` are ignored.
+- Uploads use `POST /api/images/products/{productId}`.
+
+## Upstream reference
+
 Image management
 PrestaShop manages images via the image resource, and several other resources use it as well to manage their own images. There are several types of images available, which can all be accessed via their respective API:
 

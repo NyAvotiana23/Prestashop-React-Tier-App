@@ -2,9 +2,10 @@ import React, {useEffect, useState} from "react";
 import {Link} from "react-router-dom";
 import Loading from "../shared/Loading.jsx";
 import StatusBanner from "../shared/StatusBanner.jsx";
-import {createResource, deleteResource, getList, patchResource, updateResource} from "../../api/prestashopCrud.js";
+import {createResource, deleteResource, getList} from "../../api/prestashopCrud.js";
 import {ensureArray, formatMoney, getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
-import {getDateTimeString} from "../../utils/date-utils.jsx";
+import {ORDER_STATE_FULL_OPTIONS} from "../../constants/order-states.js";
+import {updateOrderState} from "../../service/custom-stock-service.js";
 
 // ─── State definitions ────────────────────────────────────────────────────────
 
@@ -13,38 +14,20 @@ import {getDateTimeString} from "../../utils/date-utils.jsx";
  * It is never sent to the API as a real order state.
  */
 const CART_ONLY_SENTINEL = "__cart_only__";
+const STATE_PAYMENT_ACCEPTED = "11";
+const STATE_DELIVERED = "5";
+const STATE_CANCELED = "6";
 
 /**
- * Simplified 3-state selector for EXISTING orders.
- * "Dans le panier" (id=1) triggers a delete to restore the cart.
- * "Paiement accepté" (id=2) and "Annulé" (id=3) post an order_history.
+ * Managed states for existing orders.
+ * "Dans le panier" is virtual and deletes the order to restore the cart.
  */
 const ORDER_STATE_OPTIONS = [
-    {id: "1", id_order_state: null, color: "#eeff00", name: "Dans le panier", template: "retour_panier"},
-    {id: "2", id_order_state: "2", color: "#3498D8", name: "Paiement accepté", template: "payment"},
-    {id: "3", id_order_state: "6", color: "#2C3E50", name: "Annulé", template: "order_canceled"},
-];
-
-/** Full 17-state list used only for badge display lookups. */
-const ORDER_STATE_FULL_OPTIONS = [
-    {id: "1", color: "#34209E", name: "En attente du paiement par chèque"},
-    {id: "2", color: "#3498D8", name: "Paiement accepté"},
-    {id: "3", color: "#3498D8", name: "En cours de préparation"},
-    {id: "4", color: "#01B887", name: "Expédié"},
-    {id: "5", color: "#01B887", name: "Livré"},
-    {id: "6", color: "#2C3E50", name: "Annulé"},
-    {id: "7", color: "#01B887", name: "Remboursé"},
-    {id: "8", color: "#E74C3C", name: "Erreur de paiement"},
-    {id: "9", color: "#3498D8", name: "En attente de réapprovisionnement (payé)"},
-    {id: "10", color: "#34209E", name: "En attente de virement bancaire"},
-    {id: "11", color: "#3498D8", name: "Paiement à distance accepté"},
-    {id: "12", color: "#34209E", name: "En attente de réapprovisionnement (non payé)"},
-    {id: "13", color: "#34209E", name: "En attente de paiement à la livraison"},
-    {id: "14", color: "#34209E", name: "En attente de paiement"},
-    {id: "15", color: "#01B887", name: "Remboursement partiel"},
-    {id: "16", color: "#3498D8", name: "Paiement partiel"},
-    {id: "17", color: "#3498D8", name: "Autorisation. A capturer par le marchand"},
-];
+     {id: CART_ONLY_SENTINEL, id_order_state: null, color: "#eeff00", name: "Dans le panier", template: "retour_panier"},
+     {id: STATE_PAYMENT_ACCEPTED, id_order_state: STATE_PAYMENT_ACCEPTED, color: "#3498D8", name: "Paiement accepté", template: "payment"},
+     {id: STATE_DELIVERED, id_order_state: STATE_DELIVERED, color: "#01B887", name: "Livré", template: "delivered"},
+     {id: STATE_CANCELED, id_order_state: STATE_CANCELED, color: "#2C3E50", name: "Annulé", template: "order_canceled"},
+ ];
 
 /** Virtual state shown in the select for cart-only rows. */
 const CART_ONLY_OPTION = {
@@ -56,12 +39,12 @@ const CART_ONLY_OPTION = {
 
 /**
  * Options shown in the select for cart-only rows:
- * sentinel + the 3 simplified states (Paiement accepté / Annulé).
+ * sentinel + the 3 actionable states (Paiement accepté / Livré / Annulé).
  * Excludes "Dans le panier" from the actionable options — only the sentinel represents it.
  */
 const CART_STATE_SELECT_OPTIONS = [
     CART_ONLY_OPTION,
-    ...ORDER_STATE_OPTIONS.filter((o) => o.id !== "1"),
+    ...ORDER_STATE_OPTIONS.filter((o) => o.id !== CART_ONLY_SENTINEL),
 ];
 
 /** Badge display — full 17-state list for rich labels/colors. */
@@ -69,9 +52,30 @@ function stateOption(id) {
     return ORDER_STATE_FULL_OPTIONS.find((o) => o.id === String(id)) ?? null;
 }
 
-/** Simplified 3-option lookup for existing-order select. */
-function simplifiedOption(id) {
+/** Managed option lookup for existing-order select. */
+function managedOption(id) {
     return ORDER_STATE_OPTIONS.find((o) => o.id === String(id)) ?? null;
+}
+
+function getTransitionError(currentState, nextState) {
+    const normalizedCurrent = String(currentState);
+    const normalizedNext = String(nextState);
+
+    if (normalizedNext === normalizedCurrent) return null;
+
+    if (normalizedCurrent !== STATE_PAYMENT_ACCEPTED) {
+        return "Seules les commandes en paiement accepté (11) peuvent changer d'état.";
+    }
+
+    if (
+        normalizedNext === CART_ONLY_SENTINEL ||
+        normalizedNext === STATE_DELIVERED ||
+        normalizedNext === STATE_CANCELED
+    ) {
+        return null;
+    }
+    alert("État cible non géré.")
+    return "État cible non géré.";
 }
 
 // ─── Data-fetching helpers ────────────────────────────────────────────────────
@@ -163,160 +167,10 @@ async function getProductPricing(productId, combinationId) {
     return {priceHt: effectiveHt, priceTtc, product};
 }
 
-// ─── Stock movement helpers ───────────────────────────────────────────────────
-
-/**
- * Finds or creates a stock_movement_reason by name.
- * Returns the reason id string.
- */
-async function ensureStockMvtReason(reason) {
-    const name = String(reason ?? "").trim();
-    if (!name) return "";
-
-    // Try to find an existing reason with this exact name first
-    const listResponse = await getList("stock_movement_reasons", {
-        display: "full",
-        limit: "0,50",
-    });
-    const items = ensureArray(
-        listResponse?.data?.stock_movement_reasons?.stock_movement_reason ?? []
-    );
-    const match = items.find(
-        (r) => getLanguageText(r?.name)?.toLowerCase() === name.toLowerCase()
-    );
-    if (match) return getScalarValue(match?.id);
-
-    // Create it — name must be a language node for PrestaShop
-    const response = await createResource("stock_movement_reasons", {
-        stock_movement_reason: {
-            name: [{attrs: {"@_id": "1"}, value: name}],
-        },
-    });
-    return getScalarValue(response?.data?.stock_movement_reason?.id) ?? "";
-}
-
-/**
- * Creates a stock_movement record that decrements stock for one order line.
- *
- * @param {{
- *   id_product: string,
- *   id_product_attribute: string,
- *   id_stock: string,
- *   id_order: string,
- *   date_add: string,   // "YYYY-MM-DD HH:mm:SS"
- *   quantity: number,   // negative = decrease
- *   price_te: string,
- * }} stockMvt
- * @param {string} reason  Human-readable reason label
- */
-async function createStockMvt(stockMvt, reason) {
-    const {
-        id_product = "0",
-        id_product_attribute = "0",
-        id_currency = "1",
-        id_stock = "0",
-        id_order = "0",
-        date_add,
-        quantity = 0,
-        price_te = "0",
-    } = stockMvt;
-
-    if (id_product === "0" || id_stock === "0") {
-        throw new Error(
-            "createStockMvt: id_product and id_stock cannot be '0' — " +
-            JSON.stringify(stockMvt)
-        );
-    }
-
-    const normalizedDate = String(date_add ?? "").trim();
-    if (!normalizedDate) {
-        throw new Error("createStockMvt: date_add is required.");
-    }
-
-    const parsedQty = Number(quantity);
-    if (!Number.isFinite(parsedQty) || parsedQty === 0) {
-        throw new Error("createStockMvt: quantity is invalid or zero — " + JSON.stringify(stockMvt));
-    }
-
-    const reasonId = await ensureStockMvtReason(reason);
-    if (!reasonId) throw new Error("createStockMvt: stock movement reason could not be found or created.");
-
-    const parsedPrice = parseFloat(price_te);
-    const normalizedPrice = Number.isFinite(parsedPrice) ? parsedPrice.toFixed(6) : "0.000000";
-    // price_te is 0 for outgoing movements (negative qty)
-    const priceTeValue = parsedQty < 0 ? "0.000000" : normalizedPrice;
-
-    await createResource("stock_movements", {
-        stock_movement: {
-            id_currency,
-            id_product,
-            id_product_attribute,
-            id_employee: "1",
-            id_stock,
-            id_stock_mvt_reason: reasonId,
-            id_order,
-            sign: parsedQty >= 0 ? "1" : "-1",
-            physical_quantity: Math.abs(parsedQty),
-            date_add: normalizedDate,
-            price_te: priceTeValue,
-        },
-    });
-}
-
-/**
- * Fetches the stock_available record for a product/combination and registers
- * a stock movement for the given order quantity (negative = decrement).
- *
- * Does NOT patch stock_availables — PrestaShop handles the quantity decrement
- * internally when the order is created. We only add the movement audit record.
- */
-async function recordStockMvtForOrderRow({
-                                             productId,
-                                             combinationId,
-                                             orderId,
-                                             quantity,
-                                             priceHt,
-                                             dateAdd,
-                                         }) {
-    const stockResponse = await getList("stock_availables", {
-        display: "full",
-        filters: {
-            id_product: productId,
-            id_product_attribute: combinationId || "0",
-        },
-        limit: "0,1",
-    });
-
-    const stockItem = ensureArray(
-        stockResponse?.data?.stock_availables?.stock_available ?? []
-    )[0];
-    const stockId = getScalarValue(stockItem?.id);
-
-    if (!stockId) {
-        console.warn(
-            `recordStockMvtForOrderRow: no stock_available found for product ${productId} / combo ${combinationId}`
-        );
-        return;
-    }
-
-    await createStockMvt(
-        {
-            id_product: productId,
-            id_product_attribute: combinationId || "0",
-            id_stock: stockId,
-            id_order: orderId,
-            date_add: dateAdd,
-            quantity: -Math.abs(quantity),   // always a decrease
-            price_te: String(priceHt ?? "0"),
-        },
-        "Commande client"
-    );
-}
-
 async function buildOrderRowsFromCart(cart) {
     const cartRows = getCartRows(cart);
 
-    const enrichedRows = await Promise.all(
+    const orderRows = await Promise.all(
         cartRows.map(async (row) => {
             const productId = getScalarValue(row?.id_product);
             const combinationId = getScalarValue(row?.id_product_attribute) || "0";
@@ -327,7 +181,6 @@ async function buildOrderRowsFromCart(cart) {
             const reference = getScalarValue(pricing.product?.reference) || "";
 
             return {
-                // API payload fields
                 product_id: productId,
                 product_attribute_id: combinationId,
                 product_quantity: quantity,
@@ -336,16 +189,9 @@ async function buildOrderRowsFromCart(cart) {
                 product_price: pricing.priceTtc.toFixed(6),
                 unit_price_tax_incl: pricing.priceTtc.toFixed(6),
                 unit_price_tax_excl: pricing.priceHt.toFixed(6),
-                // Kept for stock movement recording (not sent to order_rows)
-                _productId: productId,
-                _combinationId: combinationId,
-                _quantity: quantity,
-                _priceHt: pricing.priceHt,
             };
         })
     );
-
-    const orderRows = enrichedRows.map(({_productId, _combinationId, _quantity, _priceHt, ...apiFields}) => apiFields);
 
     const totalPaid = orderRows
         .reduce(
@@ -355,13 +201,13 @@ async function buildOrderRowsFromCart(cart) {
         )
         .toFixed(6);
 
-    return {orderRows, totalPaid, enrichedRows};
+    return {orderRows, totalPaid};
 }
 
 /**
  * Convert a cart into a real PrestaShop order, then immediately attach
- * an order_history record so the order lands in the desired state.
- */
+ * a custom state update when needed (livre/annule).
+  */
 async function createOrderFromCart(cart, targetStateId) {
     const cartId = getScalarValue(cart?.id);
 
@@ -377,7 +223,7 @@ async function createOrderFromCart(cart, targetStateId) {
     const langId = getScalarValue(cart?.id_lang) || "1";
     const customerId = getScalarValue(cart?.id_customer);
 
-    const {orderRows, totalPaid, enrichedRows} = await buildOrderRowsFromCart(cart);
+    const {orderRows, totalPaid} = await buildOrderRowsFromCart(cart);
 
     const orderPayload = {
         order: {
@@ -408,33 +254,12 @@ async function createOrderFromCart(cart, targetStateId) {
 
     if (!orderId) throw new Error("La commande a été créée mais l'ID est introuvable.");
 
-    // Attach the desired order state via order_histories
-    await createResource("order_histories", {
-        order_history: {
-            id_order: orderId,
-            id_order_state: targetStateId,
-        },
-    });
-
-    // Record a stock decrement movement for each ordered line
-    const dateAdd = getDateTimeString();
-    for (const row of enrichedRows) {
-        try {
-            await recordStockMvtForOrderRow({
-                productId: row._productId,
-                combinationId: row._combinationId,
-                orderId,
-                quantity: row._quantity,
-                priceHt: row._priceHt,
-                dateAdd,
-            });
-        } catch (err) {
-            // Non-fatal: log and continue so the order itself is not rolled back
-            console.error(
-                `Stock movement failed for product ${row._productId} / combo ${row._combinationId}:`,
-                err
-            );
-        }
+    if (String(targetStateId) === STATE_DELIVERED || String(targetStateId) === STATE_CANCELED) {
+        await updateOrderState({
+            orderId,
+            stateId: Number(targetStateId),
+            effectiveDate: new Date(),
+        });
     }
 
     return orderId;
@@ -522,15 +347,26 @@ function Orders() {
 
     // ── Update state for an existing order (3 simplified options) ────────────
 
-    async function handleUpdateOrderState(orderId, nextSimpleId) {
-        const option = simplifiedOption(nextSimpleId);
+    async function handleUpdateOrderState(orderId, currentState, nextStateId) {
+        const option = managedOption(nextStateId);
         const confirmed = window.confirm(
             `Changer l'état de la commande #${orderId} vers "${option?.name}" ?`
         );
         if (!confirmed) return;
 
+        if (String(nextStateId) === String(currentState)) {
+            setSuccessMessage("Aucun changement d'état.");
+            return;
+        }
+
+        const transitionError = getTransitionError(currentState, nextStateId);
+        if (transitionError) {
+            setUpdateError(new Error(transitionError));
+            return;
+        }
+
         // "Dans le panier" → delete the order to restore it as a cart
-        if (nextSimpleId === "1") {
+        if (nextStateId === CART_ONLY_SENTINEL) {
             const confirmDelete = window.confirm(
                 `Supprimer la commande #${orderId} pour la remettre dans le panier ?`
             );
@@ -539,46 +375,6 @@ function Orders() {
             setUpdatingId(orderId);
             setUpdateError(null);
             try {
-                // ── Fetch full order to retrieve its rows ──────────────────────
-                const orderResponse = await getList("orders", {
-                    display: "full",
-                    filters: { id: orderId },
-                    limit: "0,1",
-                });
-                const order = ensureArray(
-                    orderResponse?.data?.orders?.order ?? []
-                )[0];
-                const orderRowsList = ensureArray(
-                    order?.associations?.order_rows?.order_row ?? []
-                );
-                const dateAdd = getDateTimeString();
-
-                // ── Record a stock increase for each order row ─────────────────
-                for (const row of orderRowsList) {
-                    const productId     = getScalarValue(row?.product_id);
-                    const combinationId = getScalarValue(row?.product_attribute_id) || "0";
-                    const quantity      = Number(getScalarValue(row?.product_quantity) ?? 0);
-                    const priceHt       = getScalarValue(row?.unit_price_tax_excl) || "0";
-
-                    if (!productId || !quantity) continue;
-                    try {
-                        await recordStockMvtForOrderRow({
-                            productId,
-                            combinationId,
-                            orderId,
-                            quantity,
-                            priceHt,
-                            dateAdd,
-                            sign: 1,               // increase
-                        });
-                    } catch (err) {
-                        console.error(
-                            `Stock revert failed for product ${productId} / combo ${combinationId}:`,
-                            err
-                        );
-                    }
-                }
-
                 await deleteResource("orders", orderId);
                 setOrders((prev) => prev.filter((o) => getScalarValue(o?.id) !== orderId));
                 setSuccessMessage(`Commande #${orderId} supprimée — panier restauré.`);
@@ -591,7 +387,7 @@ function Orders() {
             return;
         }
 
-        // Real state → post order_history with the mapped id_order_state
+        // Real state → custom endpoint for livre/annule
         const targetStateId = option?.id_order_state;
         if (!targetStateId) return;
 
@@ -599,11 +395,10 @@ function Orders() {
         setUpdateError(null);
 
         try {
-            await createResource("order_histories", {
-                order_history: {
-                    id_order: orderId,
-                    id_order_state: targetStateId,
-                },
+            await updateOrderState({
+                orderId,
+                stateId: Number(targetStateId),
+                effectiveDate: new Date(),
             });
 
             setOrders((prev) =>
@@ -688,7 +483,7 @@ function Orders() {
         }
     }
 
-    // ── Render ───────────────────────────────────────────────────────────────
+    // ── Render ────────────────────────────────���──────────────────────────────
 
     if (status === "loading") return <Loading>orders</Loading>;
 
@@ -807,7 +602,7 @@ function Orders() {
                                                     Dans le panier
                                                 </span>
 
-                                                {/* Select — sentinel + 2 actionable states */}
+                                                {/* Select — sentinel + 3 actionable states */}
                                                 <select
                                                     value={pendingSelected}
                                                     onChange={(e) =>
@@ -884,15 +679,13 @@ function Orders() {
                                 const customerId = getScalarValue(order?.id_customer) || "N/A";
                                 const payment = getScalarValue(order?.payment) || "N/A";
                                 const totalPaid = formatMoney(order?.total_paid);
-                                const currentState = String(getScalarValue(order?.current_state) || "1");
+                                const currentState = String(getScalarValue(order?.current_state) || STATE_PAYMENT_ACCEPTED);
                                 const createdAt = getScalarValue(order?.date_add) || "N/A";
 
-                                const currentOption = stateOption(currentState);
-                                // Default the pending select to whichever simplified option is closest.
-                                // If the current state doesn't match any simplified id, default to "1".
-                                const simplifiedDefault = simplifiedOption(currentState)?.id ?? "1";
-                                const pendingSelected = pendingStates[id] ?? simplifiedDefault;
+                                const managedDefault = managedOption(currentState)?.id ?? STATE_PAYMENT_ACCEPTED;
+                                const pendingSelected = pendingStates[id] ?? managedDefault;
                                 const isUpdating = updatingId === id;
+                                const canQuickChange = currentState === STATE_PAYMENT_ACCEPTED;
 
                                 return (
                                     <tr key={id} className="hover:bg-gray-50">
@@ -915,7 +708,7 @@ function Orders() {
                                                     disabled={isUpdating}
                                                     className="rounded border border-gray-200 bg-white px-2 py-1 text-xs disabled:opacity-50"
                                                     style={{
-                                                        borderLeftColor: simplifiedOption(pendingSelected)?.color ?? "#ccc",
+                                                        borderLeftColor: managedOption(pendingSelected)?.color ?? "#ccc",
                                                         borderLeftWidth: 3,
                                                     }}
                                                 >
@@ -927,11 +720,27 @@ function Orders() {
                                                 </select>
 
                                                 <button
-                                                    onClick={() => handleUpdateOrderState(id, pendingSelected)}
+                                                    onClick={() => handleUpdateOrderState(id, currentState, pendingSelected)}
                                                     disabled={isUpdating}
                                                     className="rounded bg-zinc-700 px-2 py-1 text-xs font-semibold text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
                                                 >
                                                     {isUpdating ? "…" : "Appliquer"}
+                                                </button>
+
+                                                <button
+                                                    onClick={() => handleUpdateOrderState(id, currentState, STATE_DELIVERED)}
+                                                    disabled={isUpdating || !canQuickChange}
+                                                    className="rounded bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                                >
+                                                    Livré
+                                                </button>
+
+                                                <button
+                                                    onClick={() => handleUpdateOrderState(id, currentState, STATE_CANCELED)}
+                                                    disabled={isUpdating || !canQuickChange}
+                                                    className="rounded bg-rose-600 px-2 py-1 text-xs font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-40"
+                                                >
+                                                    Annulé
                                                 </button>
                                             </div>
                                         </td>

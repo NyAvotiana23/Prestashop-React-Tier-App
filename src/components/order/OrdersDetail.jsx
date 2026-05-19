@@ -238,6 +238,12 @@ export default function OrdersDetail() {
                                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Unit
                                         price (tax incl.)
                                     </th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Unit
+                                        price (tax excl.)
+                                    </th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                        Total price (tax incl.)
+                                    </th>
                                 </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 bg-white">
@@ -246,6 +252,9 @@ export default function OrdersDetail() {
                                     const productName = getScalarValue(row?.product_name) || "N/A";
                                     const quantity = getScalarValue(row?.product_quantity) || "0";
                                     const unitPrice = formatMoney(row?.unit_price_tax_incl);
+                                    const unitPriceExl = formatMoney(row?.unit_price_tax_excl);
+                                    const total = formatMoney(unitPrice * quantity)
+
 
                                     return (
                                         <tr key={rowId} className="hover:bg-gray-50">
@@ -253,6 +262,10 @@ export default function OrdersDetail() {
                                             <td className="max-w-[300px] truncate px-4 py-3 text-gray-800">{productName}</td>
                                             <td className="px-4 py-3 font-mono text-xs text-gray-600">{quantity}</td>
                                             <td className="px-4 py-3 font-mono text-gray-800">{unitPrice}</td>
+                                            <td className="px-4 py-3 font-mono text-gray-800">{unitPriceExl}</td>
+                                            <td className="px-4 py-3 font-mono text-gray-800">{total}</td>
+
+
                                         </tr>
                                     );
                                 })}

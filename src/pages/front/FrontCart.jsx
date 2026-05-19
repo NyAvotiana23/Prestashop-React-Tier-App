@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useState} from "react";
-import {useNavigate} from "react-router-dom";
+import {useLocation, useNavigate} from "react-router-dom";
 
 import {createResource, getList} from "../../api/prestashopCrud.js";
 import {ensureArray, getLanguageText, getScalarValue} from "../../utils/util-functions.js";
@@ -232,10 +232,12 @@ export default function FrontCart() {
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
     const navigate = useNavigate();
+    const location = useLocation();
     const [selectedAddressId, setSelectedAddressId] = useState("");
     const [addresses, setAddresses] = useState([]);
     const [addressForm, setAddressForm] = useState(() => buildInitialAddressForm(customerUser));
     const [isSavingAddress, setIsSavingAddress] = useState(false);
+    const isAnonymUser = customerUser?.isAnonymUser;
 
     const loadAddresses = useCallback(async () => {
         if (!customerUser?.id) return;
@@ -375,6 +377,11 @@ export default function FrontCart() {
     }
     async function handleCreateCartOnly() {
         if (!customerUser || !items.length) return;
+        if (isAnonymUser) {
+            setError("Veuillez vous connecter avec un autre compte pour creer un panier.");
+            setStatus("error");
+            return;
+        }
 
         setStatus("loading");
         setError(null);
@@ -402,6 +409,11 @@ export default function FrontCart() {
 
     async function handleCheckout() {
         if (!customerUser || !items.length) return;
+        if (isAnonymUser) {
+            setError("Veuillez vous connecter avec un autre compte pour valider la commande.");
+            setStatus("error");
+            return;
+        }
 
         setStatus("loading");
         setError(null);
@@ -481,6 +493,10 @@ export default function FrontCart() {
         }
     }
 
+    function handleSwitchUser() {
+        navigate("/select_user", {state: {from: location}});
+    }
+
     if (!items.length) {
         return <p className="text-sm text-zinc-500">Votre panier est vide.</p>;
     }
@@ -494,6 +510,12 @@ export default function FrontCart() {
 
             {error && <StatusBanner variant="error" message={error}/>}
             {success && <StatusBanner variant="success" message={success}/>}
+            {isAnonymUser && (
+                <StatusBanner
+                    variant="warning"
+                    message="Connectez-vous avec un autre compte pour creer un panier ou valider la commande."
+                />
+            )}
 
             <div className="space-y-6">
                 <section className="space-y-3 rounded border border-zinc-200 bg-white p-4">
@@ -637,6 +659,15 @@ export default function FrontCart() {
                 </div>
 
                 <div className="flex flex-wrap gap-3">
+                    {isAnonymUser && (
+                        <button
+                            type="button"
+                            onClick={handleSwitchUser}
+                            className="rounded border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+                        >
+                            Choisir un autre utilisateur
+                        </button>
+                    )}
                     <button
                         type="button"
                         disabled={status === "loading"}
@@ -645,24 +676,46 @@ export default function FrontCart() {
                     >
                         Clear
                     </button>
-                    <button
-                        type="button"
-                        disabled={status === "loading"}
-                        onClick={handleCreateCartOnly}
-                        className="rounded border border-emerald-600 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
-                    >
-                        {status === "loading" ? "Creation..." : "Creer le panier"}
-                    </button>
-                    <button
-                        type="button"
-                        disabled={status === "loading"}
-                        onClick={handleCheckout}
-                        className="rounded bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-                    >
-                        {status === "loading" ? "Validation..." : "Valider la commande"}
-                    </button>
+                    {isAnonymUser ? (
+                        <>
+                            <button
+                                type="button"
+                                onClick={handleSwitchUser}
+                                className="rounded border border-emerald-600 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+                            >
+                                Se connecter pour creer le panier
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSwitchUser}
+                                className="rounded bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                            >
+                                Se connecter pour valider la commande
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <button
+                                type="button"
+                                disabled={status === "loading"}
+                                onClick={handleCreateCartOnly}
+                                className="rounded border border-emerald-600 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+                            >
+                                {status === "loading" ? "Creation..." : "Creer le panier"}
+                            </button>
+                            <button
+                                type="button"
+                                disabled={status === "loading"}
+                                onClick={handleCheckout}
+                                className="rounded bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                            >
+                                {status === "loading" ? "Validation..." : "Valider la commande"}
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
         </section>
     );
 }
+

@@ -30,8 +30,8 @@ export default function FrontProductDetail() {
         return combinationQuantities[String(combinationId)] ?? 1;
     }
 
-    function setCombinationQty(combinationId, value) {
-        const next = Math.max(1, Number(value) || 1);
+    function setCombinationQty(combinationId, value, max) {
+        const next = clampQty(value, max);
         setCombinationQuantities((prev) => ({...prev, [String(combinationId)]: next}));
     }
 
@@ -216,6 +216,14 @@ export default function FrontProductDetail() {
 
     const baseStock = stockByAttribute["0"] ?? null;
 
+    function clampQty(value, max) {
+        const numeric = Number(value);
+        const normalized = Number.isFinite(numeric) && numeric > 0 ? numeric : 1;
+        if (max === null || max === undefined) return Math.max(1, normalized);
+        const cap = Math.max(0, Number(max) || 0);
+        return Math.min(normalized, cap);
+    }
+
     function buildImageUrl(productId, imageId) {
         if (!imageBaseUrl || !productId || !imageId) return "";
         return `${imageBaseUrl}/images/products/${productId}/${imageId}${imageQuery}`;
@@ -284,27 +292,30 @@ export default function FrontProductDetail() {
                             <span className="text-sm text-zinc-600 mr-2">Quantité</span>
                             <button
                                 type="button"
-                                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                                onClick={() => setQuantity((q) => clampQty(q - 1, baseStock))}
                                 className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 text-base font-bold"
                             >−
                             </button>
                             <input
                                 type="number"
-                                min={1}
+                                min={baseStock !== null && baseStock <= 0 ? 0 : 1}
+                                max={baseStock ?? undefined}
                                 value={quantity}
-                                onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
+                                onChange={(e) => setQuantity(clampQty(e.target.value, baseStock))}
                                 className="w-14 rounded border border-zinc-300 px-2 py-1 text-sm text-center"
                             />
                             <button
                                 type="button"
-                                onClick={() => setQuantity((q) => q + 1)}
+                                onClick={() => setQuantity((q) => clampQty(q + 1, baseStock))}
                                 className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 text-base font-bold"
                             >+
                             </button>
                         </div>
                         <button
                             type="button"
-                            onClick={() =>
+                            onClick={() => {
+                                const nextQty = clampQty(quantity, baseStock);
+                                if (nextQty <= 0) return;
                                 addItem(
                                     {
                                         lineId: `${id}:0`,
@@ -315,9 +326,9 @@ export default function FrontProductDetail() {
                                         price: Number(priceTtc),
                                         reference: getScalarValue(product?.reference),
                                     },
-                                    quantity
-                                )
-                            }
+                                    nextQty
+                                );
+                            }}
                             className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
                         >
                             Ajouter au panier
@@ -383,27 +394,47 @@ export default function FrontProductDetail() {
                                                 <span className="text-sm text-zinc-600 mr-1">Qté</span>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setCombinationQty(combinationId, getCombinationQty(combinationId) - 1)}
+                                                    onClick={() =>
+                                                        setCombinationQty(
+                                                            combinationId,
+                                                            getCombinationQty(combinationId) - 1,
+                                                            combinationStock
+                                                        )
+                                                    }
                                                     className="flex h-7 w-7 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 text-base font-bold"
                                                 >−
                                                 </button>
                                                 <input
                                                     type="number"
-                                                    min={1}
+                                                    min={combinationStock !== null && combinationStock <= 0 ? 0 : 1}
+                                                    max={combinationStock ?? undefined}
                                                     value={getCombinationQty(combinationId)}
-                                                    onChange={(e) => setCombinationQty(combinationId, e.target.value)}
+                                                    onChange={(e) =>
+                                                        setCombinationQty(combinationId, e.target.value, combinationStock)
+                                                    }
                                                     className="w-12 rounded border border-zinc-300 px-1 py-1 text-sm text-center"
                                                 />
                                                 <button
                                                     type="button"
-                                                    onClick={() => setCombinationQty(combinationId, getCombinationQty(combinationId) + 1)}
+                                                    onClick={() =>
+                                                        setCombinationQty(
+                                                            combinationId,
+                                                            getCombinationQty(combinationId) + 1,
+                                                            combinationStock
+                                                        )
+                                                    }
                                                     className="flex h-7 w-7 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100 text-base font-bold"
                                                 >+
                                                 </button>
                                             </div>
                                             <button
                                                 type="button"
-                                                onClick={() =>
+                                                onClick={() => {
+                                                    const nextQty = clampQty(
+                                                        getCombinationQty(combinationId),
+                                                        combinationStock
+                                                    );
+                                                    if (nextQty <= 0) return;
                                                     addItem(
                                                         {
                                                             lineId: `${id}:${combinationId}`,
@@ -415,9 +446,9 @@ export default function FrontProductDetail() {
                                                             reference: getScalarValue(product?.reference),
                                                             variantLabel,
                                                         },
-                                                        getCombinationQty(combinationId)
-                                                    )
-                                                }
+                                                        nextQty
+                                                    );
+                                                }}
                                                 className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
                                             >
                                                 Ajouter au panier

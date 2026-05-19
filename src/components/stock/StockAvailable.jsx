@@ -70,17 +70,50 @@ function QuantityBadge({qty}) {
 
 function PatchModal({stock, productRef, variantLabel, onClose, onPatch}) {
     const [delta, setDelta] = useState("");
+    const [priceTe, setPriceTe] = useState("");
+
     const [dateAdd, setDateAdd] = useState(toDateTimeLocalValue(getDateTimeString()));
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
     const currentQty = Number(getScalarValue(stock?.quantity) ?? 0);
     const deltaNum = delta === "" || delta === "-" ? 0 : Number(delta);
+    const priceTeNum = priceTe === "" || priceTe === "-" ? 0 : Number(priceTe);
+
+    useEffect(() => {
+        let cancelled = false;
+        async function loadWholesalePrice() {
+            if (priceTe !== "") return;
+            const productId = getScalarValue(stock?.id_product);
+            if (!productId) return;
+            try {
+                const productResponse = await getList("products", {
+                    display: "[id,wholesale_price]",
+                    filters: {id: productId},
+                    limit: "0,1",
+                });
+                const product = normalizeProducts(productResponse?.data ?? productResponse)[0];
+                const wholesalePrice = getScalarValue(product?.wholesale_price);
+                if (!cancelled && wholesalePrice) {
+                    setPriceTe(String(wholesalePrice));
+                }
+            } catch (err) {
+                if (!cancelled) setError(err?.message ?? "Erreur inconnue");
+            }
+        }
+        loadWholesalePrice();
+        return () => {
+            cancelled = true;
+        };
+    }, [priceTe, stock]);
+
     const preview = currentQty + deltaNum;
     const previewColors = getQtyColor(preview);
 
     async function handleSubmit() {
         if (delta === "" || isNaN(Number(delta))) return;
+        if (isNaN(Number(priceTe))) return;
+
         if (deltaNum === 0) {
             setError("La quantité ne peut pas être nulle.");
             return;
@@ -100,15 +133,6 @@ function PatchModal({stock, productRef, variantLabel, onClose, onPatch}) {
             if (!productId) {
                 throw new Error("Id produit introuvable.");
             }
-
-            const productResponse = await getList("products", {
-                display: "[id,wholesale_price]",
-                filters: {id: productId},
-                limit: "0,1",
-            });
-            const product = normalizeProducts(productResponse?.data ?? productResponse)[0];
-            const wholesalePrice = getScalarValue(product?.wholesale_price);
-            const priceTe = deltaNum < 0 ? "0.000000" : formatPriceTe(wholesalePrice);
 
             const newQty = currentQty + Number(delta);
             await patchResource("stock_availables", stockId, {
@@ -130,7 +154,7 @@ function PatchModal({stock, productRef, variantLabel, onClose, onPatch}) {
                 id_stock: stockId,
                 date_add: normalizedDate,
                 quantity: String(deltaNum),
-                price_te: priceTe,
+                price_te: priceTeNum,
             }, "Ajustement stock");
 
             onClose();
@@ -191,6 +215,15 @@ function PatchModal({stock, productRef, variantLabel, onClose, onPatch}) {
                     placeholder="ex: 10 ou -5"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
                     autoFocus
+                    onKeyDown={e => e.key === "Enter" && handleSubmit()}
+                />
+                <label className="block text-sm font-medium text-gray-600 mb-1.5 mt-4">Price te</label>
+                <input
+                    type="number"
+                    value={priceTe}
+                    onChange={e => setPriceTe(e.target.value)}
+                    placeholder="ex: 10"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
                     onKeyDown={e => e.key === "Enter" && handleSubmit()}
                 />
 

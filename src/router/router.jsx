@@ -24,6 +24,7 @@ import FrontSelectUser from "../pages/front/FrontSelectUser.jsx";
 import {DefaultValuesProvider} from "../context/provider/DefaultValuesProvider.jsx";
 import FrontCartHistory from "../pages/front/FrontCartHistory.jsx";
 import StockAvailable from "../components/stock/StockAvailable.jsx";
+import Statistics from "../pages/Statistics.jsx";
 
 export const router = createBrowserRouter([
     {
@@ -39,6 +40,8 @@ export const router = createBrowserRouter([
                 element: <RequireAdmin/>,
                 children: [
                     {index: true, element: <Dashboard/>},
+                    {path: "statistics", element: <Statistics/>},
+
                     {path: "reset-database", element: <ResetDatabase/>},
                     {path: "import-database", element: <ImportDatabase/>},
                     {path: "import-database", element: <ImportDatabase/>},
@@ -65,10 +68,10 @@ export const router = createBrowserRouter([
             {path: "select_user", element: <FrontSelectUser/>},
             {path: "login", element: <FrontLogin/>},
             {path: "products/:productId", element: <FrontProductDetail/>},
+            {path: "cart", element: <FrontCart/>},
             {
                 element: <RequireCustomer/>,
                 children: [
-                    {path: "cart", element: <FrontCart/>},
                     {path: "cart_histories", element: <FrontCartHistory/>},
                     {path: "orders", element: <FrontOrders/>},
                     {path: "orders/:orderId", element: <FrontOrderDetail/>},

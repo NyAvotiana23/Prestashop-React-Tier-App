@@ -6,7 +6,7 @@ export function RequireCustomer() {
     const location = useLocation();
 
     if (!customerUser) {
-        return <Navigate to="/login" replace state={{ from: location }} />;
+        return <Navigate to="/select_user" replace state={{ from: location }} />;
     }
 
     return <Outlet />;

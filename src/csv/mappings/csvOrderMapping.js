@@ -7,10 +7,9 @@
  * live in util-functions.js.
  */
 
-import {createResource, getList, patchResource} from "../../api/prestashopCrud.js";
+import {createResource, patchResource} from "../../api/prestashopCrud.js";
 import {parseDateToIso} from "../csvImportUtils.js";
 import {
-    ensureArray,
     getLanguageText,
     getScalarValue,
     normalizeText,
@@ -27,15 +26,14 @@ import {
     getFirstCurrencyId,
     getFirstCarrierId,
     getTaxRateForGroup,
-    ensureOrderState,
     resolveCombinationId,
-    createStockMvt,
     DEFAULT_LANG_ID,
     DEFAULT_COUNTRY_ID,
     DEFAULT_CITY_NAME,
     DEFAULT_POST_CODE,
     DEFAULT_ANONYM_GROUP,
 } from "./csvMappingUtils.js";
+import {updateOrderState} from "../../service/custom-stock-service.js";
 
 // ─── Anonymous customer constants ─────────────────────────────────────────────
 
@@ -259,6 +257,13 @@ export async function processOrderRow(row) {
     const currencyId = (await getFirstCurrencyId()) || "1";
     const carrierId = (await getFirstCarrierId()) || "1";
     const createdDate = parseDateToIso(row?.date) + " 00:00:00";
+    const normalizedEtat = normalizeText(getScalarValue(row?.etat));
+    const isCartOnly = !normalizedEtat || normalizedEtat === normalizeText("dans le panier");
+    const isPaymentAccepted =
+        normalizedEtat === normalizeText("paiement accepte") ||
+        normalizedEtat === normalizeText("paiement a distance accepte");
+    const isDelivered = normalizedEtat === normalizeText("livre");
+    const isCanceled = normalizedEtat === normalizeText("annule");
 
     // Create cart
     const cartPayload = {
@@ -287,7 +292,7 @@ export async function processOrderRow(row) {
     if (!cartId) throw new Error(`Creation du panier echouee (client: ${customerId})`);
 
     // Skip order creation if status means "in cart"
-    if (!row?.etat || normalizeText(getScalarValue(row?.etat)) === normalizeText("dans le panier")) {
+    if (isCartOnly) {
         return {
             status: "skipped",
             reason: "Dans le panier, carte crées seulement. Etat vide: commande non creee",
@@ -295,8 +300,10 @@ export async function processOrderRow(row) {
         };
     }
 
-    const stateId = await ensureOrderState(row?.etat);
-    if (!stateId) throw new Error(`Etat de commande inconnu: ${row?.etat}`);
+    if (!isPaymentAccepted && !isDelivered && !isCanceled) {
+        throw new Error(`Etat de commande non gere: ${row?.etat}`);
+    }
+
 
     const totalPaid = items
         .reduce((sum, item) => sum + item.priceTtc * item.quantity, 0)
@@ -343,33 +350,12 @@ export async function processOrderRow(row) {
     await patchResource("carts", cartId, {cart: {id: cartId, date_add: createdDate}});
     await patchResource("orders", orderId, {order: {id: orderId, date_add: createdDate}});
 
-    // Decrease stock for each ordered item
-    for (const item of items) {
-        const productId = getScalarValue(item.product?.id);
-        const combinationId = item.combinationId || "0";
-
-        const stockResponse = await getList("stock_availables", {
-            display: "full",
-            filters: {id_product: productId, id_product_attribute: combinationId},
-            limit: "0,1",
+    if (isDelivered || isCanceled) {
+        await updateOrderState({
+            orderId,
+            stateId: isDelivered ? 5 : 6,
+            effectiveDate: createdDate,
         });
-        const stockItem = ensureArray(stockResponse?.data?.stock_availables?.stock_available ?? [])[0];
-        const stockId = getScalarValue(stockItem?.id);
-
-        if (stockId) {
-            await createStockMvt(
-                {
-                    id_product: productId,
-                    id_product_attribute: combinationId,
-                    id_stock: stockId,
-                    id_order: orderId,
-                    date_add: createdDate,
-                    quantity: -item.quantity,   // negative = decrease
-                    price_te: item.priceHt.toFixed(6),
-                },
-                "Commande client"
-            );
-        }
     }
 
     return {
