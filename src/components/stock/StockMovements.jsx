@@ -1,148 +1,18 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {getList} from "../../api/prestashopCrud.js";
-import {ensureArray, getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
-
-// ─── Normalizers ──────────────────────────────────────────────────────────────
-
-function normalizeStockMovements(data) {
-    if (!data || typeof data !== "object") return [];
-    const node =
-        data?.stock_movements?.stock_movement ??
-        data?.stock_mvts?.stock_mvt ??
-        data?.stock_movement ??
-        data?.stock_mvt ??
-        data?.stock_movements ??
-        data?.stock_mvts ??
-        [];
-    return ensureArray(node);
-}
-
-// ─── Formatters ───────────────────────────────────────────────────────────────
-
-function formatNumber(value) {
-    const num = Number(value);
-    if (!Number.isFinite(num)) return "0";
-    return num.toLocaleString("fr-FR");
-}
-
-function formatDateTime(value) {
-    if (!value) return "—";
-    const normalized = String(value).includes(" ") ? String(value).replace(" ", "T") : String(value);
-    const date = new Date(normalized);
-    if (Number.isNaN(date.getTime())) return String(value);
-    return date.toLocaleString("fr-FR", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-    });
-}
-
-// ─── Variant label enrichment ─────────────────────────────────────────────────
-//
-// Mirrors the same 4-step chain used in FrontProductDetail and StockAvailable:
-//   1. combinations (already fetched, passed in)
-//   2. product_option_values  — one batch call
-//   3. product_options        — one batch call
-//   4. build "Group: Value · Group: Value" strings
-//
-// Writes results into a combinationId → label string cache (useRef).
-// Returns a cleanup function for AbortController usage.
-
-async function enrichVariantLabels(combinations, cacheRef, onDone, signal) {
-    if (!combinations.length) return;
-
-    try {
-        // Collect all option value IDs across all combinations
-        const optionValueIds = new Set();
-        combinations.forEach((comb) => {
-            const values = ensureArray(
-                comb?.associations?.product_option_values?.product_option_value ?? []
-            );
-            values.forEach((v) => {
-                const vid = getScalarValue(v?.id ?? v);
-                if (vid) optionValueIds.add(vid);
-            });
-        });
-
-        if (!optionValueIds.size) return;
-
-        // Step 1: batch-fetch option values
-        const ovResponse = await getList("product_option_values", {
-            display: "full",
-            filters: {id: `[${[...optionValueIds].join("|")}]`},
-            limit: `0,${optionValueIds.size}`,
-            signal,
-        });
-        const optionValues = ensureArray(
-            ovResponse?.data?.product_option_values?.product_option_value ?? []
-        );
-
-        // Build valueId → { name, groupId }
-        const optionValueMap = {};
-        const groupIds = new Set();
-        optionValues.forEach((ov) => {
-            const ovId    = getScalarValue(ov?.id);
-            const groupId = getScalarValue(ov?.id_attribute_group);
-            if (ovId) {
-                optionValueMap[String(ovId)] = {
-                    name:    getLanguageText(ov?.name) || String(ovId),
-                    groupId: groupId ? String(groupId) : "",
-                };
-            }
-            if (groupId) groupIds.add(String(groupId));
-        });
-
-        // Step 2: batch-fetch attribute groups
-        const optionGroupMap = {};
-        if (groupIds.size > 0) {
-            const grpResponse = await getList("product_options", {
-                display: "full",
-                filters: {id: `[${[...groupIds].join("|")}]`},
-                limit: `0,${groupIds.size}`,
-                signal,
-            });
-            const groups = ensureArray(
-                grpResponse?.data?.product_options?.product_option ?? []
-            );
-            groups.forEach((g) => {
-                const gid = getScalarValue(g?.id);
-                if (gid) {
-                    optionGroupMap[String(gid)] = getLanguageText(g?.name) || `Option ${gid}`;
-                }
-            });
-        }
-
-        // Step 3: build label strings and write into cache
-        combinations.forEach((comb) => {
-            const combId = getScalarValue(comb?.id);
-            if (!combId) return;
-
-            const values = ensureArray(
-                comb?.associations?.product_option_values?.product_option_value ?? []
-            );
-            const parts = values
-                .map((v) => {
-                    const vid = getScalarValue(v?.id ?? v);
-                    const ov  = optionValueMap[String(vid)];
-                    if (!ov) return null;
-                    const groupName = optionGroupMap[ov.groupId] || "";
-                    return groupName ? `${groupName}: ${ov.name}` : ov.name;
-                })
-                .filter(Boolean);
-
-            cacheRef.current[String(combId)] = parts.length
-                ? parts.join(" · ")
-                : null; // fall back to reference / id display
-        });
-
-        onDone();
-    } catch (err) {
-        if (isAbortError(err)) return;
-        // On failure leave cache entries absent — getComboLabel falls back gracefully
-    }
-}
+import {
+    buildVariantLabelMapFromCombinations,
+    fetchCombinations,
+    fetchProducts,
+    fetchStockMovementsForProduct,
+} from "../../service/stock-service.js";
+import {
+    ensureArray,
+    formatDateTime,
+    formatNumber,
+    getLanguageText,
+    getScalarValue,
+    isAbortError,
+} from "../../utils/util-functions.js";
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -179,12 +49,11 @@ function StockMovements() {
         async function loadProducts() {
             try {
                 setProductsStatus("loading");
-                const response = await getList("products", {
+                const items = await fetchProducts({
                     display: "full",
                     limit: "0,1000",
                     signal: controller.signal,
                 });
-                const items = ensureArray(response?.data?.products?.product ?? []);
                 setProducts(items);
                 setProductsStatus("idle");
             } catch (err) {
@@ -212,25 +81,25 @@ function StockMovements() {
         async function loadCombinations() {
             try {
                 setCombosStatus("loading");
-                const response = await getList("combinations", {
+                const items = await fetchCombinations({
                     display: "full",
                     filters: {id_product: selectedProductId},
                     limit: "0,200",
                     signal: controller.signal,
                 });
-                const items = ensureArray(response?.data?.combinations?.combination ?? []);
                 setCombinations(items);
                 setCombosStatus("idle");
 
                 // Enrich variant labels asynchronously — does not block the dropdown
                 // from appearing; it just shows "#id" until labels arrive.
                 if (items.length > 0) {
-                    await enrichVariantLabels(
-                        items,
-                        variantLabelCache,
-                        () => setCacheVersion((v) => v + 1), // single re-render after all labels ready
-                        controller.signal
-                    );
+                    const labels = await buildVariantLabelMapFromCombinations(items, {
+                        signal: controller.signal,
+                    });
+                    Object.entries(labels).forEach(([key, value]) => {
+                        variantLabelCache.current[String(key)] = value;
+                    });
+                    setCacheVersion((v) => v + 1);
                 }
             } catch (err) {
                 if (isAbortError(err, controller.signal)) return;
@@ -265,62 +134,11 @@ function StockMovements() {
         setFetchError(null);
 
         try {
-            // ── Step 1: resolve id_stock values for the product ──────────────
-            const stockFilters = {id_product: selectedProductId};
-            if (selectedComboId !== "") {
-                stockFilters.id_product_attribute = selectedComboId;
-            }
-
-            const stocksResponse = await getList("stock_availables", {
-                display: "full",
-                filters: stockFilters,
-                limit: "0,200",
+            const result = await fetchStockMovementsForProduct({
+                productId: selectedProductId,
+                combinationId: selectedComboId,
+                selectedDate,
             });
-
-            const stockItems = ensureArray(
-                stocksResponse?.data?.stock_availables?.stock_available ?? []
-            );
-
-            if (stockItems.length === 0) {
-                setMovements([]);
-                setFetchStatus("success");
-                setHasFetched(true);
-                return;
-            }
-
-            const stockIds = stockItems
-                .map((s) => getScalarValue(s?.id))
-                .filter(Boolean);
-
-            // ── Step 2: fetch movements for each id_stock in parallel ────────
-            const allMovements = (
-                await Promise.all(
-                    stockIds.map((stockId) =>
-                        getList("stock_movements", {
-                            display: "full",
-                            sort: "[id_DESC]",
-                            filters: {id_stock: stockId},
-                            limit: "0,500",
-                        }).then((r) => normalizeStockMovements(r?.data ?? r))
-                    )
-                )
-            ).flat();
-
-            // ── Step 3: sort merged list by id DESC ──────────────────────────
-            allMovements.sort((a, b) => {
-                const ia = Number(getScalarValue(a?.id) || 0);
-                const ib = Number(getScalarValue(b?.id) || 0);
-                return ib - ia;
-            });
-
-            // ── Step 4: single-date client-side filter ───────────────────────
-            let result = allMovements;
-            if (selectedDate) {
-                result = allMovements.filter((mvt) => {
-                    const raw = getScalarValue(mvt?.date_add);
-                    return raw ? String(raw).slice(0, 10) === selectedDate : false;
-                });
-            }
 
             setMovements(result);
             setFetchStatus("success");

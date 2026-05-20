@@ -1,244 +1,16 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {getList} from "../api/prestashopCrud.js";
-import {ensureArray, formatMoney, getScalarValue, isAbortError} from "../utils/util-functions.js";
+import {formatMoney, getScalarValue, isAbortError} from "../utils/util-functions.js";
+import {
+    buildCartStats,
+    buildOrderStats,
+    collectOrderDates,
+    fetchOrdersByDate,
+    filterCartsByDate,
+    isValidOrder,
+    loadDashboardData,
+} from "../service/dashboard-service.js";
 import Loading from "../components/shared/Loading.jsx";
 import StatusBanner from "../components/shared/StatusBanner.jsx";
-
-// ─── Normalizers ──────────────────────────────────────────────────────────────
-
-function normalizeOrders(data) {
-    if (!data || typeof data !== "object") return [];
-    const ordersNode = data?.orders?.order ?? data?.orders ?? data?.order ?? [];
-    return ensureArray(ordersNode);
-}
-
-function normalizeCarts(response) {
-    return ensureArray(
-        response?.data?.carts?.cart ?? response?.data?.carts ?? []
-    );
-}
-
-function getCartRows(cart) {
-    const rows = cart?.associations?.cart_rows?.cart_row
-        ?? cart?.associations?.cart_rows
-        ?? [];
-    return ensureArray(rows);
-}
-
-// ─── Value helpers ────────────────────────────────────────────────────────────
-
-/** Safely parse a PrestaShop scalar to a float (0 on failure). */
-function toFloat(val) {
-    const n = parseFloat(getScalarValue(val) ?? "");
-    return Number.isFinite(n) ? n : 0;
-}
-
-/** Sum a numeric field across an array of objects. */
-function sumField(items, field) {
-    return items.reduce((acc, item) => acc + toFloat(item?.[field]), 0);
-}
-
-// ─── Pricing cache (module-level, survives re-renders, reset on page reload) ──
-//
-// These Maps mirror the caching pattern from csvMappingUtils.js:
-//   always check the cache first, store on every successful fetch.
-//
-// PRODUCT_CACHE     : productId  → { baseHt, taxRate }  |  null (miss)
-// COMBO_CACHE       : comboId    → delta HT (float)
-// TAX_RATE_CACHE    : taxGroupId → rate (float)
-// CART_VALUE_CACHE  : cartId     → { value_ttc, value_ht }
-//
-// CART_VALUE_CACHE lets us skip recomputation when the same cart
-// appears in multiple stat buckets (cart-only, cart+order, all-carts).
-
-const PRODUCT_CACHE    = new Map();
-const COMBO_CACHE      = new Map();
-const TAX_RATE_CACHE   = new Map();
-const CART_VALUE_CACHE = new Map();
-
-/**
- * Returns the tax rate (%) for a tax_rules_group id.
- * Two API calls on a miss (tax_rules → taxes), result cached forever.
- */
-async function fetchTaxRate(taxRulesGroupId) {
-    if (!taxRulesGroupId) return 0;
-    if (TAX_RATE_CACHE.has(taxRulesGroupId)) return TAX_RATE_CACHE.get(taxRulesGroupId);
-
-    const rulesRes = await getList("tax_rules", {
-        display: "full",
-        filters: {id_tax_rules_group: String(taxRulesGroupId)},
-        limit:   "0,1",
-    });
-    const rule  = ensureArray(rulesRes?.data?.tax_rules?.tax_rule ?? [])[0];
-    const taxId = getScalarValue(rule?.id_tax);
-    if (!taxId) {
-        TAX_RATE_CACHE.set(taxRulesGroupId, 0);
-        return 0;
-    }
-
-    const taxRes = await getList("taxes", {
-        display: "full",
-        filters: {id: taxId},
-        limit:   "0,1",
-    });
-    const tax  = ensureArray(taxRes?.data?.taxes?.tax ?? [])[0];
-    const rate = parseFloat(getScalarValue(tax?.rate) ?? "0") || 0;
-
-    TAX_RATE_CACHE.set(taxRulesGroupId, rate);
-    return rate;
-}
-
-/**
- * Returns { baseHt, taxRate } for a productId.
- *   baseHt  = product.price (HT, before combination delta)
- *   taxRate = resolved from product.id_tax_rules_group
- *
- * Returns null on a product-not-found miss (also cached to avoid retries).
- */
-async function fetchProductBase(productId) {
-    if (PRODUCT_CACHE.has(productId)) return PRODUCT_CACHE.get(productId);
-
-    const res     = await getList("products", {
-        display: "full",
-        filters: {id: productId},
-        limit:   "0,1",
-    });
-    const product = ensureArray(res?.data?.products?.product ?? [])[0];
-    if (!product) {
-        PRODUCT_CACHE.set(productId, null);  // cache the miss
-        return null;
-    }
-
-    const baseHt          = parseFloat(getScalarValue(product?.price) ?? "0") || 0;
-    const taxRulesGroupId = getScalarValue(product?.id_tax_rules_group);
-    const taxRate         = await fetchTaxRate(taxRulesGroupId);
-
-    const entry = {baseHt, taxRate};
-    PRODUCT_CACHE.set(productId, entry);
-    return entry;
-}
-
-/**
- * Returns the combination price delta HT for a combinationId.
- *
- * PrestaShop stores the combination price as a DELTA relative to the base
- * product price (can be negative, zero, or positive).
- * Returns 0 when combinationId is absent or "0" (no combination on the row).
- */
-async function fetchComboDelta(combinationId) {
-    if (!combinationId || combinationId === "0") return 0;
-    if (COMBO_CACHE.has(combinationId)) return COMBO_CACHE.get(combinationId);
-
-    const res   = await getList("combinations", {
-        display: "full",
-        filters: {id: combinationId},
-        limit:   "0,1",
-    });
-    const combo = ensureArray(res?.data?.combinations?.combination ?? [])[0];
-    const delta = parseFloat(getScalarValue(combo?.price) ?? "0") || 0;
-
-    COMBO_CACHE.set(combinationId, delta);
-    return delta;
-}
-
-/**
- * Computes { value_ttc, value_ht } for a single cart.
- *
- * Pricing rule (identical to getProductPricing + buildOrderRowsFromCart
- * in Orders.jsx and processOrderRow in csvOrderMapping.js):
- *
- *   effectiveHt = product.price + combination.price   (delta, 0 if no combo)
- *   priceTtc    = effectiveHt * (1 + taxRate / 100)
- *   line total  = price * quantity
- *
- * Result is cached in CART_VALUE_CACHE so the same cart is never repriced
- * across filter changes or across the three parallel stat buckets.
- */
-async function computeCartValue(cart) {
-    const cartId = String(getScalarValue(cart?.id));
-    if (CART_VALUE_CACHE.has(cartId)) return CART_VALUE_CACHE.get(cartId);
-
-    const rows = getCartRows(cart);
-    let value_ttc = 0;
-    let value_ht  = 0;
-
-    for (const row of rows) {
-        const productId     = getScalarValue(row?.id_product);
-        const combinationId = getScalarValue(row?.id_product_attribute) || "0";
-        const quantity      = parseInt(getScalarValue(row?.quantity) ?? "1", 10) || 1;
-
-        const base = await fetchProductBase(productId);
-        if (!base) continue;   // unknown product — skip row silently
-
-        const delta       = await fetchComboDelta(combinationId);
-        const effectiveHt = base.baseHt + delta;
-        const lineTtc     = effectiveHt * (1 + base.taxRate / 100) * quantity;
-        const lineHt      = effectiveHt * quantity;
-
-        value_ttc += lineTtc;
-        value_ht  += lineHt;
-    }
-
-    const result = {value_ttc, value_ht};
-    CART_VALUE_CACHE.set(cartId, result);
-    return result;
-}
-
-/**
- * Computes aggregate cart stats for a list of carts.
- * All carts are priced in parallel; CART_VALUE_CACHE ensures
- * a cart shared between two buckets is only fetched once.
- *
- * @param  {object[]} carts
- * @returns {Promise<{ count: number, value_ttc: number, value_ht: number }>}
- */
-async function buildCartStats(carts) {
-    const values = await Promise.all(carts.map(computeCartValue));
-
-    let value_ttc = 0;
-    let value_ht  = 0;
-    for (const v of values) {
-        if (!v) continue;
-        value_ttc += v.value_ttc;
-        value_ht  += v.value_ht;
-    }
-
-    return {count: carts.length, value_ttc, value_ht};
-}
-
-// ─── Order stats (synchronous — prices are already on order objects) ──────────
-
-/**
- * @param  {object[]} orders
- * @returns {{ count, total_paid, total_paid_real, total_tax_incl, total_tax_excl }}
- */
-function buildOrderStats(orders) {
-    return {
-        count:           orders.length,
-        total_paid:      sumField(orders, "total_paid"),
-        total_paid_real: sumField(orders, "total_paid_real"),
-        total_tax_incl:  sumField(orders, "total_paid_tax_incl"),
-        total_tax_excl:  sumField(orders, "total_paid_tax_excl"),
-    };
-}
-
-function isValidOrder(order, validStates) {
-    const state = String(getScalarValue(order?.current_state) ?? "");
-    return validStates.has(state);
-}
-
-/**
- * Collect unique order dates (YYYY-MM-DD), sorted descending.
- * Used to populate the "Available dates" dropdown.
- */
-function collectOrderDates(orders) {
-    const dates = new Set();
-    for (const order of orders) {
-        const day = getScalarValue(order?.date_add)?.split(' ')[0];
-        if (day) dates.add(day);
-    }
-    return Array.from(dates).sort((a, b) => b.localeCompare(a));
-}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -367,20 +139,10 @@ function Dashboard() {
             setLoadStatus("loading");
             setError(null);
 
-            const [ordersRes, cartsRes] = await Promise.all([
-                getList("orders", {display: "full", sort: "[id_ASC]", signal}),
-                getList("carts",  {display: "full", sort: "[id_ASC]", signal}),
-            ]);
-
-            if (!ordersRes?.data) {
-                setError(new Error("Invalid orders response"));
-                setLoadStatus("error");
-                return;
-            }
-
-            const orders = normalizeOrders(ordersRes?.data);
-            const carts  = normalizeCarts(cartsRes);
-            const dates  = collectOrderDates(orders);
+            const result = await loadDashboardData({signal});
+            const orders = result.orders;
+            const carts = result.carts;
+            const dates = collectOrderDates(orders);
 
             setAllOrders(orders);
             setAllCarts(carts);
@@ -414,28 +176,10 @@ function Dashboard() {
 
         try {
             // Orders: date-filtered via the API (PS supports range filters)
-            const ordersRes = await getList("orders", {
-                display: "full",
-                sort:    "[id_ASC]",
-                params: {
-                    "filter[date_add]": `[${real_date} 00:00:00,${real_date} 23:59:59]`,
-                    "date": 1,
-                },
-            });
-
-            if (!ordersRes?.data) {
-                setError(new Error("Invalid orders response"));
-                setLoadStatus("error");
-                return;
-            }
-
-            const orders = normalizeOrders(ordersRes?.data);
+            const orders = await fetchOrdersByDate(real_date);
 
             // Carts: no date-range filter on the PS carts endpoint — filter client-side
-            const carts = allCarts.filter((c) => {
-                const day = getScalarValue(c?.date_add)?.split(' ')[0];
-                return day === real_date;
-            });
+            const carts = filterCartsByDate(allCarts, real_date);
 
             setFilteredOrders(orders);
             setFilteredCarts(carts);

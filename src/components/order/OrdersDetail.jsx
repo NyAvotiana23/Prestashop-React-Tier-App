@@ -4,27 +4,8 @@ import Loading from "../shared/Loading.jsx";
 import StatusBanner from "../shared/StatusBanner.jsx";
 import Modal from "../shared/Modal.jsx";
 import UrlDescriptionCard from "../shared/UrlDescriptionCard.jsx";
-import {getById, getList} from "../../api/prestashopCrud.js";
-import {ensureArray, getScalarValue, isAbortError} from "../../utils/util-functions.js";
-
-function formatMoney(value) {
-    const amount = Number.parseFloat(getScalarValue(value) || "");
-    return Number.isFinite(amount) ? amount.toFixed(2) : "N/A";
-}
-
-function normalizeOrderPayments(data) {
-    if (!data || typeof data !== "object") return [];
-
-    const ordersNode = data?.order_payments?.order_payment ?? data?.order_payments ?? data?.order_payment ?? [];
-    return ensureArray(ordersNode);
-}
-
-function normalizeOrderInvoices(data) {
-    if (!data || typeof data !== "object") return [];
-
-    const ordersNode = data?.order_invoices?.order_invoice ?? data?.order_invoices ?? data?.order_invoice ?? [];
-    return ensureArray(ordersNode);
-}
+import {ensureArray, formatMoney, getScalarValue, isAbortError} from "../../utils/util-functions.js";
+import {fetchOrderDetail} from "../../service/order-service.js";
 
 export default function OrdersDetail() {
     const {orderId} = useParams();
@@ -49,55 +30,15 @@ export default function OrdersDetail() {
                 setError(null);
                 setSuccessMessage("");
 
-                const response = await getById("orders", orderId, {
+                const detail = await fetchOrderDetail(orderId, {
                     signal: controller.signal,
                 });
 
-
-                const nextOrder = response?.data?.order ?? null;
-
-                if (nextOrder) {
-                    const orderReference = getScalarValue(nextOrder?.reference);
-                    const orderIdValue = getScalarValue(nextOrder?.id);
-
-                    if (orderReference) {
-                        const responsePayments = await getList("order_payments",
-                            {
-                                display: "full",
-                                filters: {order_reference: orderReference},
-                                limit: 50,
-                                sort: "[id_ASC]",
-                                signal: controller.signal,
-                            });
-                        const paymentsItems = normalizeOrderPayments(responsePayments?.data);
-                        setOrderPayments(paymentsItems);
-                    } else {
-                        setOrderPayments([]);
-                    }
-
-                    if (orderIdValue) {
-                        const responseInvoices = await getList("order_invoices",
-                            {
-                                display: "full",
-                                filters: {id_order: orderIdValue},
-                                limit: 50,
-                                sort: "[id_ASC]",
-                                signal: controller.signal,
-                            });
-                        const invoicesItems = normalizeOrderInvoices(responseInvoices?.data);
-                        setOrderInvoices(invoicesItems);
-                    } else {
-                        setOrderInvoices([]);
-                    }
-                } else {
-                    setOrderPayments([]);
-                    setOrderInvoices([]);
-                }
-
-
-                setOrder(nextOrder);
+                setOrder(detail.order);
+                setOrderPayments(detail.payments);
+                setOrderInvoices(detail.invoices);
                 setStatus("success");
-                setSuccessMessage(nextOrder ? "Order loaded successfully." : "Order not found.");
+                setSuccessMessage(detail.order ? "Order loaded successfully." : "Order not found.");
             } catch (err) {
                 if (isAbortError(err, controller.signal)) return;
                 setError(err);

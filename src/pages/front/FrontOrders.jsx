@@ -1,22 +1,20 @@
 import React, {useEffect, useState} from "react";
 import {Link} from "react-router-dom";
-import {getList, patchResource} from "../../api/prestashopCrud.js";
-import {ensureArray, getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
+import {getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
 import Loading from "../../components/shared/Loading.jsx";
 import StatusBanner from "../../components/shared/StatusBanner.jsx";
 import {useCustomerUser} from "../../hooks/useCustomerUser.jsx";
 import {useDefaultValues} from "../../hooks/useDefaultValues.jsx";
-import {getDateTimeString, parseDateToString} from "../../utils/date-utils.jsx";
-import {createStockMvt} from "../../csv/mappings/csvMappingUtils.js";
-
-function normalizeOrders(data) {
-    if (!data || typeof data !== "object") return [];
-    const ordersNode = data?.orders?.order ?? data?.orders ?? data?.order ?? [];
-    return ensureArray(ordersNode);
-}
+import {duplicateOrder, fetchOrderStatesMap, listOrders} from "../../service/order-service.js";
+import {LIVRE_STATE_ID} from "../../service/custom-stock-service.js";
 
 function PatchModal({order, onClose}) {
     const [duplicatedNumber, setDuplicatedNumber] = useState(1);
+    async function handleDuplicate () {
+        if (!window.confirm("Dupliquer directement ?")) return;
+        const orderId = await duplicateOrder(getScalarValue(order?.id), duplicatedNumber, LIVRE_STATE_ID, true);
+        alert(`Order ${getScalarValue(order?.id)}  duplicated successfully new id: ${orderId} and history to livré`);
+    }
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -35,6 +33,9 @@ function PatchModal({order, onClose}) {
                     >
                         Voir la fiche
                     </Link>
+
+                    <button onClick={handleDuplicate} className={"p-2 bg-gray-200 rounded"}>Dupliquer immédiatement!</button>
+
                     <button onClick={onClose} className={"p-2 bg-blue-200 rounded"}>Fermer</button>
                 </div>
             </div>
@@ -71,31 +72,15 @@ export default function FrontOrders() {
                 setStatus("loading");
                 setError(null);
 
-                const [ordersResponse, statesResponse] = await Promise.all([
-                    getList("orders", {
+                const [items, nextStateMap] = await Promise.all([
+                    listOrders({
                         display: "full",
                         filters: {id_customer: customerUser.id},
                         sort: "[id_DESC]",
                         signal: controller.signal,
                     }),
-                    getList("order_states", {
-                        display: "full",
-                        limit: "0,100",
-                        signal: controller.signal,
-                    }),
+                    fetchOrderStatesMap({signal: controller.signal}),
                 ]);
-
-                const items = normalizeOrders(ordersResponse?.data);
-                const stateItems = ensureArray(
-                    statesResponse?.data?.order_states?.order_state ?? []
-                );
-
-                const nextStateMap = stateItems.reduce((acc, state) => {
-                    const id = getScalarValue(state?.id);
-                    const name = getLanguageText(state?.name);
-                    if (id) acc[id] = name || "Etat";
-                    return acc;
-                }, {});
 
                 setOrders(items);
                 setOrderStates(nextStateMap);

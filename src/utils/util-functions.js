@@ -167,28 +167,43 @@ export function parseFlexibleNumber(value) {
     return parseFloat(replaced);
 }
 
-// ─── Date helpers ─────────────────────────────────────────────────────────────
 
-export function isProductDateHot(date) {
-    date = new Date(date);
-    const now = new Date();
-    const yesterday = new Date(now);
-    yesterday.setDate(now.getDate() - 1);
-    return date.toDateString() === yesterday.toDateString();
-}
-
-export function isProductDateNew(date) {
-    date = new Date(date);
-    const now = new Date(Date.now());
-    const oneWeekEarlier = new Date(now - 7 * 864e5);
-    return date >= oneWeekEarlier && date <= now;
-}
 
 // ─── Formatting helpers ───────────────────────────────────────────────────────
 
 export function formatMoney(value) {
     const amount = Number.parseFloat(getScalarValue(value) || "");
     return Number.isFinite(amount) ? amount.toFixed(2) : "N/A";
+}
+
+export function formatNumber(value, locale = "fr-FR") {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return "0";
+    return num.toLocaleString(locale);
+}
+
+export function formatDateTime(value, locale = "fr-FR") {
+    if (!value) return "—";
+    const normalized = String(value).includes(" ")
+        ? String(value).replace(" ", "T")
+        : String(value);
+    const date = new Date(normalized);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString(locale, {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+}
+
+export function toDateTimeLocalValue(dateTimeStr) {
+    if (!dateTimeStr) return "";
+    const withT = dateTimeStr.includes(" ")
+        ? dateTimeStr.replace(" ", "T")
+        : dateTimeStr;
+    return withT.slice(0, 16);
 }
 
 export function isAbortError(error, signal) {

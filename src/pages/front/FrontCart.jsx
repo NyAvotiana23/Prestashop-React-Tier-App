@@ -1,13 +1,20 @@
 import {useCallback, useEffect, useState} from "react";
 import {useLocation, useNavigate} from "react-router-dom";
 
-import {createResource, getList} from "../../api/prestashopCrud.js";
-import {ensureArray, getLanguageText, getScalarValue} from "../../utils/util-functions.js";
+import {getLanguageText, getScalarValue} from "../../utils/util-functions.js";
 import {getDateTimeString} from "../../utils/date-utils.jsx";
 import StatusBanner from "../../components/shared/StatusBanner.jsx";
 import {useCart} from "../../hooks/useCart.jsx";
 import {useCustomerUser} from "../../hooks/useCustomerUser.jsx";
 import {useDefaultValues} from "../../hooks/useDefaultValues.jsx";
+import {
+    createCustomerAddress,
+    getCustomerAddressId,
+    getCustomerAddresses,
+} from "../../service/customer-service.js";
+import { createNewCart, getFirstResourceId} from "../../service/cart-service.js";
+import {buildOrderPayloadFromCart, buildOrderRowsFromItems, createOrder} from "../../service/order-service.js";
+import {recordStockMovementForOrderRow} from "../../service/stock-service.js";
 
 const DEFAULT_COUNTRY_ID = "8";
 
@@ -30,198 +37,6 @@ function buildInitialAddressForm(customerUser) {
         postcode: "",
         phone: "",
     };
-}
-
-async function getFirstId(ref, filters) {
-    const response = await getList(ref, {
-        display: "[id]",
-        limit: "0,1",
-        filters,
-    });
-    const node = response?.data?.[ref]?.[ref.slice(0, -1)] ?? response?.data?.[ref] ?? [];
-    const items = ensureArray(node);
-    const first = items[0];
-    return getScalarValue(first?.id || first?.["@_id"]);
-}
-
-async function getCustomerAddressId(customerId) {
-    const response = await getList("addresses", {
-        display: "[id]",
-        filters: {id_customer: customerId},
-        limit: "0,1",
-    });
-    const items = ensureArray(response?.data?.addresses?.address ?? []);
-    return getScalarValue(items[0]?.id || items[0]?.["@_id"]);
-}
-
-async function getCustomerAddresses(customerId) {
-    const response = await getList("addresses", {
-        display: "full",
-        filters: {id_customer: customerId},
-        limit: "0,10",
-    });
-    return ensureArray(response?.data?.addresses?.address ?? []);
-}
-
-async function getTaxRateForGroup(taxRulesGroupId) {
-    if (!taxRulesGroupId) return 0;
-
-    const rulesResponse = await getList("tax_rules", {
-        display: "full",
-        filters: {id_tax_rules_group: String(taxRulesGroupId)},
-        limit: "0,1",
-    });
-    const rule = ensureArray(rulesResponse?.data?.tax_rules?.tax_rule ?? [])[0];
-    const taxId = getScalarValue(rule?.id_tax);
-    if (!taxId) return 0;
-
-    const taxResponse = await getList("taxes", {
-        display: "full",
-        filters: {id: taxId},
-        limit: "0,1",
-    });
-    const tax = ensureArray(taxResponse?.data?.taxes?.tax ?? [])[0];
-    return parseFloat(getScalarValue(tax?.rate) ?? "0");
-}
-
-async function getProductPricing(productId, combinationId) {
-    const productResponse = await getList("products", {
-        display: "full",
-        filters: {id: productId},
-        limit: "0,1",
-    });
-    const product = ensureArray(productResponse?.data?.products?.product ?? [])[0];
-    if (!product) {
-        throw new Error(`Produit introuvable: ${productId}`);
-    }
-
-    const taxRulesGroupId = getScalarValue(product?.id_tax_rules_group);
-    const taxRate = taxRulesGroupId ? await getTaxRateForGroup(taxRulesGroupId) : 0;
-    const baseHt = parseFloat(getScalarValue(product?.price) ?? "0") || 0;
-
-    let effectiveHt = baseHt;
-    if (combinationId && String(combinationId) !== "0") {
-        const comboResponse = await getList("combinations", {
-            display: "full",
-            filters: {id: combinationId},
-            limit: "0,1",
-        });
-        const combo = ensureArray(comboResponse?.data?.combinations?.combination ?? [])[0];
-        const deltaHt = parseFloat(getScalarValue(combo?.price) ?? "0") || 0;
-        effectiveHt = baseHt + deltaHt;
-    }
-
-    const priceTtc = effectiveHt * (1 + taxRate / 100);
-    return {priceHt: effectiveHt, priceTtc};
-}
-
-// ─── Stock movement helpers ───────────────────────────────────────────────────
-
-async function ensureStockMvtReason(reason) {
-    const name = String(reason ?? "").trim();
-    if (!name) return "";
-
-    const listResponse = await getList("stock_movement_reasons", {
-        display: "full",
-        limit: "0,50",
-    });
-    const items = ensureArray(
-        listResponse?.data?.stock_movement_reasons?.stock_movement_reason ?? []
-    );
-    const match = items.find(
-        (r) => getLanguageText(r?.name)?.toLowerCase() === name.toLowerCase()
-    );
-    if (match) return getScalarValue(match?.id);
-
-    const response = await createResource("stock_movement_reasons", {
-        stock_movement_reason: {
-            name: [{attrs: {"@_id": "1"}, value: name}],
-        },
-    });
-    return getScalarValue(response?.data?.stock_movement_reason?.id) ?? "";
-}
-
-async function createStockMvt(stockMvt, reason) {
-    const {
-        id_product = "0",
-        id_product_attribute = "0",
-        id_currency = "1",
-        id_stock = "0",
-        id_order = "0",
-        date_add,
-        quantity = 0,
-        price_te = "0",
-    } = stockMvt;
-
-    if (id_product === "0" || id_stock === "0") {
-        throw new Error("createStockMvt: id_product and id_stock cannot be '0'");
-    }
-
-    const normalizedDate = String(date_add ?? "").trim();
-    if (!normalizedDate) throw new Error("createStockMvt: date_add is required.");
-
-    const parsedQty = Number(quantity);
-    if (!Number.isFinite(parsedQty) || parsedQty === 0) {
-        throw new Error("createStockMvt: quantity is invalid or zero.");
-    }
-
-    const reasonId = await ensureStockMvtReason(reason);
-    if (!reasonId) throw new Error("createStockMvt: stock movement reason could not be found or created.");
-
-    const parsedPrice = parseFloat(price_te);
-    const priceTeValue = parsedQty < 0
-        ? "0.000000"
-        : (Number.isFinite(parsedPrice) ? parsedPrice.toFixed(6) : "0.000000");
-
-    await createResource("stock_movements", {
-        stock_movement: {
-            id_currency,
-            id_product,
-            id_product_attribute,
-            id_employee: "1",
-            id_stock,
-            id_stock_mvt_reason: reasonId,
-            id_order,
-            sign: parsedQty >= 0 ? "1" : "-1",
-            physical_quantity: Math.abs(parsedQty),
-            date_add: normalizedDate,
-            price_te: priceTeValue,
-        },
-    });
-}
-
-async function recordStockMvtForOrderRow({productId, combinationId, orderId, quantity, priceHt, dateAdd}) {
-    const stockResponse = await getList("stock_availables", {
-        display: "full",
-        filters: {
-            id_product: productId,
-            id_product_attribute: combinationId || "0",
-        },
-        limit: "0,1",
-    });
-
-    const stockItem = ensureArray(
-        stockResponse?.data?.stock_availables?.stock_available ?? []
-    )[0];
-    const stockId = getScalarValue(stockItem?.id);
-
-    if (!stockId) {
-        console.warn(`recordStockMvtForOrderRow: no stock_available found for product ${productId} / combo ${combinationId}`);
-        return;
-    }
-
-    await createStockMvt(
-        {
-            id_product: productId,
-            id_product_attribute: combinationId || "0",
-            id_stock: stockId,
-            id_order: orderId,
-            date_add: dateAdd,
-            quantity: -Math.abs(quantity),
-            price_te: String(priceHt ?? "0"),
-        },
-        "Commande client"
-    );
 }
 
 export default function FrontCart() {
@@ -293,8 +108,8 @@ export default function FrontCart() {
                 },
             };
 
-            const response = await createResource("addresses", payload);
-            const newId = getScalarValue(response?.data?.address?.id);
+            const newAddress = await createCustomerAddress(payload.address);
+            const newId = getScalarValue(newAddress?.id);
             await loadAddresses();
             if (newId) setSelectedAddressId(newId);
             setAddressForm(buildInitialAddressForm(customerUser));
@@ -306,69 +121,19 @@ export default function FrontCart() {
         }
     }
 
-    async function buildOrderRowsFromItems(cartItems) {
-        const enrichedRows = await Promise.all(
-            cartItems.map(async (item) => {
-                const productId = item.productId ?? item.id;
-                const combinationId = item.productAttributeId ?? 0;
-                const pricing = await getProductPricing(productId, combinationId);
-                return {
-                    product_id: productId,
-                    product_attribute_id: combinationId,
-                    product_quantity: item.quantity,
-                    product_name: item.name,
-                    product_reference: item.reference ?? "",
-                    product_price: pricing.priceTtc.toFixed(6),
-                    unit_price_tax_incl: pricing.priceTtc.toFixed(6),
-                    unit_price_tax_excl: pricing.priceHt.toFixed(6),
-                    // kept for stock movement (stripped below before sending to API)
-                    _productId: productId,
-                    _combinationId: String(combinationId),
-                    _quantity: item.quantity,
-                    _priceHt: pricing.priceHt,
-                };
-            })
-        );
-
-        const orderRows = enrichedRows.map(
-            ({_productId, _combinationId, _quantity, _priceHt, ...apiFields}) => apiFields
-        );
-
-        const totalPaid = orderRows
-            .reduce(
-                (sum, row) => sum + Number(row.unit_price_tax_incl) * Number(row.product_quantity || 0),
-                0
-            )
-            .toFixed(6);
-
-        return {orderRows, totalPaid, enrichedRows};
-    }
-
     async function buildCartPayload(addressId) {
-        const currencyId = (await getFirstId("currencies")) || "1";
-        const carrierId = (await getFirstId("carriers")) || "1";
+        const currencyId = (await getFirstResourceId("currencies")) || "1";
+        const carrierId = (await getFirstResourceId("carriers")) || "1";
         const langId = "1";
 
-        return {
-            cart: {
-                id_currency: currencyId,
-                id_customer: customerUser.id,
-                id_lang: langId,
-                id_address_delivery: addressId,
-                id_address_invoice: addressId,
-                id_carrier: carrierId,
-                associations: {
-                    cart_rows: {
-                        cart_row: items.map((item) => ({
-                            id_product: item.productId ?? item.id,
-                            id_product_attribute: item.productAttributeId ?? 0,
-                            id_address_delivery: addressId,
-                            quantity: item.quantity,
-                        })),
-                    },
-                },
-            },
-        };
+        return buildCartPayload({
+            items,
+            customerId: customerUser.id,
+            addressId,
+            currencyId,
+            carrierId,
+            langId,
+        });
     }
 
     function handleCartClear () {
@@ -395,8 +160,7 @@ export default function FrontCart() {
             }
 
             const cartPayload = await buildCartPayload(addressId);
-            const cartResponse = await createResource("carts", cartPayload);
-            const cartId = getScalarValue(cartResponse?.data?.cart?.id);
+            const cartId = await createNewCart(cartPayload);
 
             clear();
             setSuccess(`Panier cree (ID: ${cartId || "?"}).`);
@@ -427,47 +191,29 @@ export default function FrontCart() {
             }
 
             const cartPayload = await buildCartPayload(addressId);
-            const cartResponse = await createResource("carts", cartPayload);
-            const cartId = getScalarValue(cartResponse?.data?.cart?.id);
+            const cartId = await createNewCart(cartPayload);
 
             const currencyId = cartPayload.cart.id_currency;
             const carrierId = cartPayload.cart.id_carrier;
             const langId = cartPayload.cart.id_lang;
 
             const {orderRows, totalPaid, enrichedRows} = await buildOrderRowsFromItems(items);
-
-            const orderPayload = {
-                order: {
-                    id_address_delivery: addressId,
-                    id_address_invoice: addressId,
-                    id_cart: cartId,
-                    id_currency: currencyId,
-                    id_lang: langId,
-                    id_customer: customerId,
-                    id_carrier: carrierId,
-                    module: "ps_cashondelivery",
-                    payment: "Paiement a la livraison",
-                    total_paid: totalPaid,
-                    total_paid_real: totalPaid,
-                    total_products: totalPaid,
-                    total_products_wt: totalPaid,
-                    conversion_rate: "1",
-                    associations: {
-                        order_rows: {
-                            order_row: orderRows,
-                        },
-                    },
-                },
-            };
-
-            const orderResponse = await createResource("orders", orderPayload);
-            const orderId = getScalarValue(orderResponse?.data?.order?.id);
+            const orderPayload = buildOrderPayloadFromCart({
+                cartId,
+                addressId,
+                currencyId,
+                langId,
+                customerId,
+                carrierId,
+                totalPaid,
+            });
+            const orderId = await createOrder(orderPayload);
 
             // Record a stock decrement movement for each ordered line
             const dateAdd = getDateTimeString();
             for (const row of enrichedRows) {
                 try {
-                    await recordStockMvtForOrderRow({
+                    await recordStockMovementForOrderRow({
                         productId: row._productId,
                         combinationId: row._combinationId,
                         orderId: orderId || "0",

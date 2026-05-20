@@ -4,7 +4,7 @@ import Loading from "../shared/Loading.jsx";
 import StatusBanner from "../shared/StatusBanner.jsx";
 import Modal from "../shared/Modal.jsx";
 import UrlDescriptionCard from "../shared/UrlDescriptionCard.jsx";
-import {getById} from "../../api/prestashopCrud.js";
+import {getProductById} from "../../service/product-service.js";
 import {getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
 
 export default function ProductDetail() {
@@ -26,15 +26,9 @@ export default function ProductDetail() {
                 setError(null);
                 setSuccessMessage("");
 
-                const response = await getById("products", productId, {
+                const nextProduct = await getProductById(productId, {
                     signal: controller.signal,
                 });
-
-                // Fix #6: getJson (via parseXml) already strips the <prestashop> wrapper,
-                // so response.data is already the inner object — e.g. { product: {…} }.
-                // The old double-unwrap (data?.prestashop ?? data) was harmless by accident
-                // but fragile. Access the product node directly.
-                const nextProduct = response?.data?.product ?? null;
                 setProduct(nextProduct);
                 setStatus("success");
                 setSuccessMessage(nextProduct ? "Product loaded successfully." : "Product not found.");

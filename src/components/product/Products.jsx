@@ -2,18 +2,8 @@ import {useEffect, useState} from "react";
 import {Link} from "react-router-dom";
 import Loading from "../shared/Loading.jsx";
 import StatusBanner from "../shared/StatusBanner.jsx";
-import {deleteResource, getList} from "../../api/prestashopCrud.js";
-import {ensureArray, getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
-
-// Fix #3: getJson (via prestashopApi) already strips the <prestashop> wrapper,
-// and the XMLParser isArray option keeps product list items as arrays.
-// The list payload shape is typically { products: { product: [ {…}, {…} ] } }.
-function normalizeProducts(data) {
-    if (!data || typeof data !== "object") return [];
-
-    const productsNode = data?.products?.product ?? data?.products ?? data?.product ?? [];
-    return ensureArray(productsNode);
-}
+import {getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
+import {deleteProductById, listProducts} from "../../service/product-service.js";
 
 export default function Products() {
     const [products, setProducts] = useState([]);
@@ -25,7 +15,7 @@ export default function Products() {
 
     async function handleDeleteProduct(e, productId) {
         if (!window.confirm(`Delete product : ${productId}`)) return;
-        await deleteResource("products", productId);
+        await deleteProductById(productId);
         setDeletedId(productId);
 
     }
@@ -40,23 +30,13 @@ export default function Products() {
                 setSuccessMessage("");
 
 
-                const response = await getList("products", {
+                const items = await listProducts({
                     display: "full",
                     limit: 50,
                     sort: "[id_ASC]",
                     signal: controller.signal,
                 });
 
-                const items = normalizeProducts(response?.data);
-
-                // Fix #4: the real failure case is an unexpected shape (not a missing
-                // array — normalizeProducts always returns an array). Detect it by
-                // checking whether data itself is present at all.
-                if (!response?.data) {
-                    setError(new Error("Invalid response format"));
-                    setStatus("error");
-                    return;
-                }
 
                 setProducts(items);
                 setStatus("success");

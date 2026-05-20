@@ -1,5 +1,8 @@
 import {getList} from "../api/prestashopCrud.js";
 import {ensureArray, getLanguageText, getScalarValue} from "../utils/util-functions.js";
+import {getOrderById, getOrderRows, normalizeOrders} from "./order-service.js";
+import {normalizeProducts} from "./product-service.js";
+import {normalizeCategories} from "./category-service.js";
 
 const RESERVED_STATE_IDS = new Set(["2", "11"]);
 
@@ -13,37 +16,16 @@ function normalizeStockAvailables(data) {
     return ensureArray(node);
 }
 
-function normalizeProducts(data) {
-    if (!data || typeof data !== "object") return [];
-    const node = data?.products?.product ?? data?.products ?? data?.product ?? [];
-    return ensureArray(node);
-}
 
-function normalizeOrders(data) {
-    if (!data || typeof data !== "object") return [];
-    const node = data?.orders?.order ?? data?.orders ?? data?.order ?? [];
-    return ensureArray(node);
-}
 
-function normalizeCategories(data) {
-    if (!data || typeof data !== "object") return [];
-    const node = data?.categories?.category ?? data?.categories ?? data?.category ?? [];
-    return ensureArray(node);
-}
+
+
+
 
 function toNumber(value, fallback = 0) {
     const parsed = Number(getScalarValue(value) ?? "");
     return Number.isFinite(parsed) ? parsed : fallback;
 }
-
-function getOrderRows(order) {
-    const rows =
-        order?.associations?.order_rows?.order_row ??
-        order?.associations?.order_rows ??
-        [];
-    return ensureArray(rows);
-}
-
 function getRowProductId(row) {
     return (
         getScalarValue(row?.product_id) ||
@@ -182,6 +164,9 @@ async function buildVariantLabels(combinationIds, signal) {
 
     return labels;
 }
+
+
+
 
 export async function fetchManageStockData({signal} = {}) {
     const [productsRes, ordersRes, categoriesRes] = await Promise.all([

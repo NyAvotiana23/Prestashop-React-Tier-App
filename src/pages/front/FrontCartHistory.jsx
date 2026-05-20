@@ -1,217 +1,13 @@
 import {useEffect, useState} from "react";
 import {useNavigate} from "react-router-dom";
-import {createResource, getList} from "../../api/prestashopCrud.js";
-import {ensureArray, getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
+import {getScalarValue, isAbortError} from "../../utils/util-functions.js";
 import {getDateTimeString} from "../../utils/date-utils.jsx";
 import StatusBanner from "../../components/shared/StatusBanner.jsx";
 import {useCustomerUser} from "../../hooks/useCustomerUser.jsx";
-
-function normalizeCarts(value) {
-    return ensureArray(value?.data?.carts?.cart ?? value?.data?.carts ?? []);
-}
-
-async function getFirstId(ref, filters) {
-    const response = await getList(ref, {
-        display: "[id]",
-        limit: "0,1",
-        filters,
-    });
-    const node = response?.data?.[ref]?.[ref.slice(0, -1)] ?? response?.data?.[ref] ?? [];
-    const items = ensureArray(node);
-    const first = items[0];
-    return getScalarValue(first?.id || first?.["@_id"]);
-}
-
-async function getCustomerAddressId(customerId) {
-    const response = await getList("addresses", {
-        display: "[id]",
-        filters: {id_customer: customerId},
-        limit: "0,1",
-    });
-    const items = ensureArray(response?.data?.addresses?.address ?? []);
-    return getScalarValue(items[0]?.id || items[0]?.["@_id"]);
-}
-
-async function getTaxRateForGroup(taxRulesGroupId) {
-    if (!taxRulesGroupId) return 0;
-
-    const rulesResponse = await getList("tax_rules", {
-        display: "full",
-        filters: {id_tax_rules_group: String(taxRulesGroupId)},
-        limit: "0,1",
-    });
-    const rule = ensureArray(rulesResponse?.data?.tax_rules?.tax_rule ?? [])[0];
-    const taxId = getScalarValue(rule?.id_tax);
-    if (!taxId) return 0;
-
-    const taxResponse = await getList("taxes", {
-        display: "full",
-        filters: {id: taxId},
-        limit: "0,1",
-    });
-    const tax = ensureArray(taxResponse?.data?.taxes?.tax ?? [])[0];
-    return parseFloat(getScalarValue(tax?.rate) ?? "0");
-}
-
-async function getProductPricing(productId, combinationId) {
-    const productResponse = await getList("products", {
-        display: "full",
-        filters: {id: productId},
-        limit: "0,1",
-    });
-    const product = ensureArray(productResponse?.data?.products?.product ?? [])[0];
-    if (!product) {
-        throw new Error(`Produit introuvable: ${productId}`);
-    }
-
-    const taxRulesGroupId = getScalarValue(product?.id_tax_rules_group);
-    const taxRate = taxRulesGroupId ? await getTaxRateForGroup(taxRulesGroupId) : 0;
-    const baseHt = parseFloat(getScalarValue(product?.price) ?? "0") || 0;
-
-    let effectiveHt = baseHt;
-    if (combinationId && String(combinationId) !== "0") {
-        const comboResponse = await getList("combinations", {
-            display: "full",
-            filters: {id: combinationId},
-            limit: "0,1",
-        });
-        const combo = ensureArray(comboResponse?.data?.combinations?.combination ?? [])[0];
-        const deltaHt = parseFloat(getScalarValue(combo?.price) ?? "0") || 0;
-        effectiveHt = baseHt + deltaHt;
-    }
-
-    const priceTtc = effectiveHt * (1 + taxRate / 100);
-    return {priceHt: effectiveHt, priceTtc, product};
-}
-
-function getCartRows(cart) {
-    const rows = cart?.associations?.cart_rows?.cart_row ?? cart?.associations?.cart_rows ?? [];
-    return ensureArray(rows);
-}
-
-async function findOrderByCartId(cartId) {
-    const response = await getList("orders", {
-        display: "[id,reference]",
-        filters: {id_cart: cartId},
-        limit: "0,1",
-    });
-    const items = ensureArray(response?.data?.orders?.order ?? response?.data?.orders ?? []);
-    const first = items[0];
-    if (!first) return null;
-    return {
-        id: getScalarValue(first?.id || first?.["@_id"]),
-        reference: getScalarValue(first?.reference),
-    };
-}
-
-// ─── Stock movement helpers ───────────────────────────────────────────────────
-
-async function ensureStockMvtReason(reason) {
-    const name = String(reason ?? "").trim();
-    if (!name) return "";
-
-    const listResponse = await getList("stock_movement_reasons", {
-        display: "full",
-        limit: "0,50",
-    });
-    const items = ensureArray(
-        listResponse?.data?.stock_movement_reasons?.stock_movement_reason ?? []
-    );
-    const match = items.find(
-        (r) => getLanguageText(r?.name)?.toLowerCase() === name.toLowerCase()
-    );
-    if (match) return getScalarValue(match?.id);
-
-    const response = await createResource("stock_movement_reasons", {
-        stock_movement_reason: {
-            name: [{attrs: {"@_id": "1"}, value: name}],
-        },
-    });
-    return getScalarValue(response?.data?.stock_movement_reason?.id) ?? "";
-}
-
-async function createStockMvt(stockMvt, reason) {
-    const {
-        id_product = "0",
-        id_product_attribute = "0",
-        id_currency = "1",
-        id_stock = "0",
-        id_order = "0",
-        date_add,
-        quantity = 0,
-        price_te = "0",
-    } = stockMvt;
-
-    if (id_product === "0" || id_stock === "0") {
-        throw new Error("createStockMvt: id_product and id_stock cannot be '0'");
-    }
-
-    const normalizedDate = String(date_add ?? "").trim();
-    if (!normalizedDate) throw new Error("createStockMvt: date_add is required.");
-
-    const parsedQty = Number(quantity);
-    if (!Number.isFinite(parsedQty) || parsedQty === 0) {
-        throw new Error("createStockMvt: quantity is invalid or zero.");
-    }
-
-    const reasonId = await ensureStockMvtReason(reason);
-    if (!reasonId) throw new Error("createStockMvt: stock movement reason could not be found or created.");
-
-    const parsedPrice = parseFloat(price_te);
-    const priceTeValue = parsedQty < 0
-        ? "0.000000"
-        : (Number.isFinite(parsedPrice) ? parsedPrice.toFixed(6) : "0.000000");
-
-    await createResource("stock_movements", {
-        stock_movement: {
-            id_currency,
-            id_product,
-            id_product_attribute,
-            id_employee: "1",
-            id_stock,
-            id_stock_mvt_reason: reasonId,
-            id_order,
-            sign: parsedQty >= 0 ? "1" : "-1",
-            physical_quantity: Math.abs(parsedQty),
-            date_add: normalizedDate,
-            price_te: priceTeValue,
-        },
-    });
-}
-
-async function recordStockMvtForOrderRow({productId, combinationId, orderId, quantity, priceHt, dateAdd}) {
-    const stockResponse = await getList("stock_availables", {
-        display: "full",
-        filters: {
-            id_product: productId,
-            id_product_attribute: combinationId || "0",
-        },
-        limit: "0,1",
-    });
-
-    const stockItem = ensureArray(
-        stockResponse?.data?.stock_availables?.stock_available ?? []
-    )[0];
-    const stockId = getScalarValue(stockItem?.id);
-
-    if (!stockId) {
-        console.warn(`recordStockMvtForOrderRow: no stock_available found for product ${productId} / combo ${combinationId}`);
-        return;
-    }
-
-    await createStockMvt(
-        {
-            id_product: productId,
-            id_product_attribute: combinationId || "0",
-            id_stock: stockId,
-            id_order: orderId,
-            date_add: dateAdd,
-            quantity: -Math.abs(quantity),
-            price_te: String(priceHt ?? "0"),
-        },
-        "Commande client"
-    );
-}
+import {getCartRows, getFirstResourceId, listCustomerCarts} from "../../service/cart-service.js";
+import {getCustomerAddressId} from "../../service/customer-service.js";
+import {buildOrderPayloadFromCart, buildOrderRowsFromCart, createOrder, findOrderByCartId} from "../../service/order-service.js";
+import {recordStockMovementForOrderRow} from "../../service/stock-service.js";
 
 function FrontCartHistory() {
     const {customerUser} = useCustomerUser();
@@ -231,19 +27,9 @@ function FrontCartHistory() {
                 setStatus("loading");
                 setError(null);
 
-                const cartsResponse = await getList("carts", {
-                    display: "full",
-                    filters: {
-                        id_customer: customerUser.id,
-                    },
-                    sort: "[date_add_DESC]",
-                    params: {
-                        date: 1,
-                    },
+                const carts = await listCustomerCarts(customerUser.id, {
                     signal: controller.signal,
                 });
-
-                const carts = normalizeCarts(cartsResponse);
                 setCustomerCarts(carts);
                 setStatus("success");
             } catch (err) {
@@ -256,50 +42,6 @@ function FrontCartHistory() {
         loadCustomerCarts();
         return () => controller.abort();
     }, [customerUser]);
-
-    async function buildOrderRowsFromCart(cart) {
-        const cartRows = getCartRows(cart);
-        const enrichedRows = await Promise.all(
-            cartRows.map(async (row) => {
-                const productId = getScalarValue(row?.id_product);
-                const combinationId = getScalarValue(row?.id_product_attribute) || "0";
-                const quantity = Number(getScalarValue(row?.quantity) ?? 1);
-
-                const pricing = await getProductPricing(productId, combinationId);
-                const name = getLanguageText(pricing.product?.name) || `Produit ${productId}`;
-                const reference = getScalarValue(pricing.product?.reference) || "";
-
-                return {
-                    product_id: productId,
-                    product_attribute_id: combinationId,
-                    product_quantity: quantity,
-                    product_name: name,
-                    product_reference: reference,
-                    product_price: pricing.priceTtc.toFixed(6),
-                    unit_price_tax_incl: pricing.priceTtc.toFixed(6),
-                    unit_price_tax_excl: pricing.priceHt.toFixed(6),
-                    // kept for stock movement (stripped before sending to API)
-                    _productId: productId,
-                    _combinationId: combinationId,
-                    _quantity: quantity,
-                    _priceHt: pricing.priceHt,
-                };
-            })
-        );
-
-        const orderRows = enrichedRows.map(
-            ({_productId, _combinationId, _quantity, _priceHt, ...apiFields}) => apiFields
-        );
-
-        const totalPaid = orderRows
-            .reduce(
-                (sum, row) => sum + Number(row.unit_price_tax_incl) * Number(row.product_quantity || 0),
-                0
-            )
-            .toFixed(6);
-
-        return {orderRows, totalPaid, enrichedRows};
-    }
 
     async function handleValidateCart(cart) {
         const cartId = getScalarValue(cart?.id);
@@ -334,45 +76,29 @@ function FrontCartHistory() {
                 throw new Error("Aucune adresse trouvee pour ce panier.");
             }
 
-            const currencyId = getScalarValue(cart?.id_currency) || (await getFirstId("currencies")) || "1";
-            const carrierId = getScalarValue(cart?.id_carrier) || (await getFirstId("carriers")) || "1";
+            const currencyId = getScalarValue(cart?.id_currency) || (await getFirstResourceId("currencies")) || "1";
+            const carrierId = getScalarValue(cart?.id_carrier) || (await getFirstResourceId("carriers")) || "1";
             const langId = getScalarValue(cart?.id_lang) || "1";
             const customerId = getScalarValue(cart?.id_customer);
 
             const {orderRows, totalPaid, enrichedRows} = await buildOrderRowsFromCart(cart);
+            const orderPayload = buildOrderPayloadFromCart({
+                cartId,
+                addressId: addressDelivery,
+                currencyId,
+                langId,
+                customerId,
+                carrierId,
+                totalPaid,
+            });
 
-            const orderPayload = {
-                order: {
-                    id_address_delivery: addressDelivery,
-                    id_address_invoice: addressInvoice,
-                    id_cart: cartId,
-                    id_currency: currencyId,
-                    id_lang: langId,
-                    id_customer: customerId,
-                    id_carrier: carrierId,
-                    module: "ps_cashondelivery",
-                    payment: "Paiement a la livraison",
-                    total_paid: totalPaid,
-                    total_paid_real: totalPaid,
-                    total_products: totalPaid,
-                    total_products_wt: totalPaid,
-                    conversion_rate: "1",
-                    associations: {
-                        order_rows: {
-                            order_row: orderRows,
-                        },
-                    },
-                },
-            };
-
-            const orderResponse = await createResource("orders", orderPayload);
-            const orderId = getScalarValue(orderResponse?.data?.order?.id);
+            const orderId = await createOrder(orderPayload);
 
             // Record a stock decrement movement for each ordered line
             const dateAdd = getDateTimeString();
             for (const row of enrichedRows) {
                 try {
-                    await recordStockMvtForOrderRow({
+                    await recordStockMovementForOrderRow({
                         productId: row._productId,
                         combinationId: row._combinationId,
                         orderId: orderId || "0",

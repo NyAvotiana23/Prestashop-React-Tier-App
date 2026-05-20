@@ -1,6 +1,6 @@
 import {useState} from 'react';
 import {API_URLS} from "../constants/apiData.js";
-import {resetDatabase} from "../api/prestashopCrud.js";
+import {resetDatabaseResources} from "../service/database-service.js";
 import {clearAllCaches} from "../csv/mappings/cache.js";
 
 const RESET_PRIORITY = [
@@ -77,7 +77,7 @@ function ResetDatabase() {
         try {
             setIsSubmitting(true);
             setLastReport(null);
-            const report = await resetDatabase(refs);
+            const report = await resetDatabaseResources(refs);
             setLastReport(report);
 
             const summary = summarizeReport(report);

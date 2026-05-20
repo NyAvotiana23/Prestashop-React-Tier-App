@@ -2,10 +2,18 @@ import React, {useEffect, useState} from "react";
 import {Link} from "react-router-dom";
 import Loading from "../shared/Loading.jsx";
 import StatusBanner from "../shared/StatusBanner.jsx";
-import {createResource, deleteResource, getList} from "../../api/prestashopCrud.js";
-import {ensureArray, formatMoney, getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
+import {formatMoney, getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
 import {ORDER_STATE_FULL_OPTIONS} from "../../constants/order-states.js";
 import {updateOrderState} from "../../service/custom-stock-service.js";
+import {getCustomerAddressId} from "../../service/customer-service.js";
+import {getCartRows, getFirstResourceId, listCarts} from "../../service/cart-service.js";
+import {
+    buildOrderPayloadFromCart,
+    buildOrderRowsFromCart,
+    createOrder,
+    deleteOrderById,
+    listOrders,
+} from "../../service/order-service.js";
 
 // ─── State definitions ────────────────────────────────────────────────────────
 
@@ -78,132 +86,6 @@ function getTransitionError(currentState, nextState) {
     return "État cible non géré.";
 }
 
-// ─── Data-fetching helpers ────────────────────────────────────────────────────
-
-function normalizeCarts(value) {
-    return ensureArray(value?.data?.carts?.cart ?? value?.data?.carts ?? []);
-}
-
-function normalizeOrders(data) {
-    if (!data || typeof data !== "object") return [];
-    const node = data?.orders?.order ?? data?.orders ?? data?.order ?? [];
-    return ensureArray(node);
-}
-
-function getCartRows(cart) {
-    const rows = cart?.associations?.cart_rows?.cart_row ?? cart?.associations?.cart_rows ?? [];
-    return ensureArray(rows);
-}
-
-async function getFirstId(ref, filters) {
-    const response = await getList(ref, {
-        display: "[id]",
-        limit: "0,1",
-        filters,
-    });
-    const node = response?.data?.[ref]?.[ref.slice(0, -1)] ?? response?.data?.[ref] ?? [];
-    const items = ensureArray(node);
-    const first = items[0];
-    return getScalarValue(first?.id || first?.["@_id"]);
-}
-
-async function getCustomerAddressId(customerId) {
-    const response = await getList("addresses", {
-        display: "[id]",
-        filters: {id_customer: customerId},
-        limit: "0,1",
-    });
-    const items = ensureArray(response?.data?.addresses?.address ?? []);
-    return getScalarValue(items[0]?.id || items[0]?.["@_id"]);
-}
-
-async function getTaxRateForGroup(taxRulesGroupId) {
-    if (!taxRulesGroupId) return 0;
-
-    const rulesResponse = await getList("tax_rules", {
-        display: "full",
-        filters: {id_tax_rules_group: String(taxRulesGroupId)},
-        limit: "0,1",
-    });
-    const rule = ensureArray(rulesResponse?.data?.tax_rules?.tax_rule ?? [])[0];
-    const taxId = getScalarValue(rule?.id_tax);
-    if (!taxId) return 0;
-
-    const taxResponse = await getList("taxes", {
-        display: "full",
-        filters: {id: taxId},
-        limit: "0,1",
-    });
-    const tax = ensureArray(taxResponse?.data?.taxes?.tax ?? [])[0];
-    return parseFloat(getScalarValue(tax?.rate) ?? "0");
-}
-
-async function getProductPricing(productId, combinationId) {
-    const productResponse = await getList("products", {
-        display: "full",
-        filters: {id: productId},
-        limit: "0,1",
-    });
-    const product = ensureArray(productResponse?.data?.products?.product ?? [])[0];
-    if (!product) throw new Error(`Produit introuvable: ${productId}`);
-
-    const taxRulesGroupId = getScalarValue(product?.id_tax_rules_group);
-    const taxRate = taxRulesGroupId ? await getTaxRateForGroup(taxRulesGroupId) : 0;
-    const baseHt = parseFloat(getScalarValue(product?.price) ?? "0") || 0;
-
-    let effectiveHt = baseHt;
-    if (combinationId && String(combinationId) !== "0") {
-        const comboResponse = await getList("combinations", {
-            display: "full",
-            filters: {id: combinationId},
-            limit: "0,1",
-        });
-        const combo = ensureArray(comboResponse?.data?.combinations?.combination ?? [])[0];
-        const deltaHt = parseFloat(getScalarValue(combo?.price) ?? "0") || 0;
-        effectiveHt = baseHt + deltaHt;
-    }
-
-    const priceTtc = effectiveHt * (1 + taxRate / 100);
-    return {priceHt: effectiveHt, priceTtc, product};
-}
-
-async function buildOrderRowsFromCart(cart) {
-    const cartRows = getCartRows(cart);
-
-    const orderRows = await Promise.all(
-        cartRows.map(async (row) => {
-            const productId = getScalarValue(row?.id_product);
-            const combinationId = getScalarValue(row?.id_product_attribute) || "0";
-            const quantity = Number(getScalarValue(row?.quantity) ?? 1);
-
-            const pricing = await getProductPricing(productId, combinationId);
-            const name = getLanguageText(pricing.product?.name) || `Produit ${productId}`;
-            const reference = getScalarValue(pricing.product?.reference) || "";
-
-            return {
-                product_id: productId,
-                product_attribute_id: combinationId,
-                product_quantity: quantity,
-                product_name: name,
-                product_reference: reference,
-                product_price: pricing.priceTtc.toFixed(6),
-                unit_price_tax_incl: pricing.priceTtc.toFixed(6),
-                unit_price_tax_excl: pricing.priceHt.toFixed(6),
-            };
-        })
-    );
-
-    const totalPaid = orderRows
-        .reduce(
-            (sum, row) =>
-                sum + Number(row.unit_price_tax_incl) * Number(row.product_quantity || 0),
-            0
-        )
-        .toFixed(6);
-
-    return {orderRows, totalPaid};
-}
-
 /**
  * Convert a cart into a real PrestaShop order, then immediately attach
  * a custom state update when needed (livre/annule).
@@ -218,39 +100,24 @@ async function createOrderFromCart(cart, targetStateId) {
 
     if (!addressDelivery) throw new Error("Aucune adresse trouvée pour ce panier.");
 
-    const currencyId = getScalarValue(cart?.id_currency) || (await getFirstId("currencies")) || "1";
-    const carrierId = getScalarValue(cart?.id_carrier) || (await getFirstId("carriers")) || "1";
+    const currencyId = getScalarValue(cart?.id_currency) || (await getFirstResourceId("currencies")) || "1";
+    const carrierId = getScalarValue(cart?.id_carrier) || (await getFirstResourceId("carriers")) || "1";
     const langId = getScalarValue(cart?.id_lang) || "1";
     const customerId = getScalarValue(cart?.id_customer);
 
     const {orderRows, totalPaid} = await buildOrderRowsFromCart(cart);
 
-    const orderPayload = {
-        order: {
-            id_address_delivery: addressDelivery,
-            id_address_invoice: addressInvoice,
-            id_cart: cartId,
-            id_currency: currencyId,
-            id_lang: langId,
-            id_customer: customerId,
-            id_carrier: carrierId,
-            module: "ps_cashondelivery",
-            payment: "Paiement à la livraison",
-            total_paid: totalPaid,
-            total_paid_real: totalPaid,
-            total_products: totalPaid,
-            total_products_wt: totalPaid,
-            conversion_rate: "1",
-            associations: {
-                order_rows: {
-                    order_row: orderRows,
-                },
-            },
-        },
-    };
+    const orderPayload = buildOrderPayloadFromCart({
+        cartId,
+        addressId: addressDelivery,
+        currencyId,
+        langId,
+        customerId,
+        carrierId,
+        totalPaid,
+    });
 
-    const orderResponse = await createResource("orders", orderPayload);
-    const orderId = getScalarValue(orderResponse?.data?.order?.id);
+    const orderId = await createOrder(orderPayload);
 
     if (!orderId) throw new Error("La commande a été créée mais l'ID est introuvable.");
 
@@ -306,13 +173,10 @@ function Orders() {
                 setError(null);
                 setSuccessMessage("");
 
-                const [ordersResponse, cartsResponse] = await Promise.all([
-                    getList("orders", {display: "full", sort: "[id_ASC]", signal: controller.signal}),
-                    getList("carts", {display: "full", sort: "[id_ASC]", signal: controller.signal}),
+                const [orderItems, cartItems] = await Promise.all([
+                    listOrders({display: "full", sort: "[id_ASC]", signal: controller.signal}),
+                    listCarts({display: "full", sort: "[id_ASC]", signal: controller.signal}),
                 ]);
-
-                const orderItems = normalizeOrders(ordersResponse?.data);
-                const cartItems = normalizeCarts(cartsResponse);
 
 
                 // Build the set of cart IDs that already have an order
@@ -375,7 +239,7 @@ function Orders() {
             setUpdatingId(orderId);
             setUpdateError(null);
             try {
-                await deleteResource("orders", orderId);
+                await deleteOrderById(orderId);
                 setOrders((prev) => prev.filter((o) => getScalarValue(o?.id) !== orderId));
                 setSuccessMessage(`Commande #${orderId} supprimée — panier restauré.`);
             } catch (err) {

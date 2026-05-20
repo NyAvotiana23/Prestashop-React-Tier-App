@@ -1,26 +1,20 @@
-import React, {use, useEffect, useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {useParams} from "react-router-dom";
-import {addWhitespaceAroundMathOperators} from "tailwindcss/src/util/math-operators.js";
-import {getById, getList} from "../../api/prestashopCrud.js";
 import Loading from "../../components/shared/Loading.jsx";
 import {ensureArray, getScalarValue} from "../../utils/util-functions.js";
 import {getStockByProductIds} from "../../service/stock-service.js";
 import {useCustomerUser} from "../../hooks/useCustomerUser.jsx";
 import {getFirstId} from "../../csv/mappings/csvMappingUtils.js";
 import {getFirstCustomerAddress} from "../../service/customer-service.js";
-import {buildOrderPayload, createOrder, getOrderRows} from "../../service/order-service.js";
+import {
+    buildOrderPayload,
+    buildProductIdsFilterFromOrderRows,
+    createOrder, duplicateOrder,
+    getOrderById,
+    getOrderRows,
+} from "../../service/order-service.js";
 import {createNewCart} from "../../service/cart-service.js";
 import {LIVRE_STATE_ID, updateOrderState} from "../../service/custom-stock-service.js";
-
-
-function buildProductIdsFilterFromOrderRows(rows) {
-    const ids = [];
-    for (const row of rows) {
-        const productId = getScalarValue(row?.product_id);
-        ids.push(productId);
-    }
-    return ids.join("|");
-}
 
 function FrontOrderDuplication(props) {
     const {orderId, duplicateNumber} = useParams();
@@ -48,49 +42,8 @@ function FrontOrderDuplication(props) {
     async function handleValiderDuplication() {
         setLoading(true);
         try {
-            const address = await getFirstCustomerAddress(customerUser?.id);
-            const addressId = getScalarValue(address?.id);
-            const items = buildNewOrderItemsForCart();
-            console.table(items);
-
-            const currencyId = (await getFirstId("currencies")) || "1";
-            const carrierId = (await getFirstId("carriers")) || "1";
-            const langId = "1";
-
-
-            const cart = {
-                id_currency: currencyId,
-                id_customer: customerUser.id,
-                id_lang: langId,
-                id_address_delivery: addressId,
-                id_address_invoice: addressId,
-                id_carrier: carrierId,
-                associations: {
-                    cart_rows: {
-                        cart_row: items.map((item) => ({
-                            id_product: item.productId ?? item.id,
-                            id_product_attribute: item.productAttributeId ?? 0,
-                            id_address_delivery: addressId,
-                            quantity: item.quantity,
-                        })),
-                    },
-                },
-            }
-
-            console.log(cart);
-            const idCart = await createNewCart(cart);
-            cart["id"] = idCart;
-
-            const orderPayload = await buildOrderPayload(cart, addressId);
-            const orderCreated = await createOrder(orderPayload);
-            await updateOrderState({
-                    orderId: orderCreated,
-                    stateId: LIVRE_STATE_ID,
-                    effectiveDate: new Date()
-                }
-            );
-            alert(`Order created ${orderCreated} and history to livré`);
-
+            const orderCreated = await duplicateOrder(orderId, duplicateNumber, LIVRE_STATE_ID, true);
+            alert(`Order ${orderId}  duplicated successfully new id: ${orderCreated} and history to livré`);
         } catch (error) {
             console.log("Error : " + error.message);
             setError(error.message);
@@ -109,10 +62,9 @@ function FrontOrderDuplication(props) {
             setLoading(true);
             setError(null);
             try {
-                const orderResponse = await getById("orders", orderId);
-                const orderData = orderResponse?.data?.order;
+                const orderData = await getOrderById(orderId);
 
-                if (orderResponse) {
+                if (orderData) {
                     setOrder(orderData);
                 } else {
                     throw new Error("Order not fetched " + orderId)

@@ -1,38 +1,34 @@
 import {useEffect, useRef, useState} from "react";
 import {Link} from "react-router-dom";
-import {getList} from "../../api/prestashopCrud.js";
 import {
     ensureArray,
     getLanguageText,
     getScalarValue,
     isAbortError,
-    isProductDateHot, isProductDateNew
 } from "../../utils/util-functions.js";
-import {getTaxRateForGroup} from "../../csv/mappings/csvMappingUtils.js";
 import Loading from "../../components/shared/Loading.jsx";
 import StatusBanner from "../../components/shared/StatusBanner.jsx";
 import {useDefaultValues} from "../../hooks/useDefaultValues.jsx";
 import {HotBadge, NewBadge} from "../../utils/util-components.jsx";
+import {
+    buildImageUrl,
+    buildTaxRateMapForProducts,
+    isProductDateHot,
+    isProductDateNew,
+    listProducts
+} from "../../service/product-service.js";
 
-function normalizeProducts(data) {
-    if (!data || typeof data !== "object") return [];
-    const productsNode = data?.products?.product ?? data?.products ?? data?.product ?? [];
-    return ensureArray(productsNode);
-}
+
 
 
 export default function FrontHome() {
 
 
-    const apiBaseUrl = import.meta.env.VITE_PRESTASHOP_API_URL;
-    const apiKey = import.meta.env.VITE_PRESTASHOP_API_KEY;
+
     const imageBaseUrl = apiBaseUrl ? String(apiBaseUrl).replace(/\/+$/, "") : "";
     const imageQuery = apiKey ? `?ws_key=${apiKey}` : "";
 
-    function buildImageUrl(productId, imageId) {
-        if (!imageBaseUrl || !productId || !imageId) return "";
-        return `${imageBaseUrl}/images/products/${productId}/${imageId}${imageQuery}`;
-    }
+
 
     const {defaultCountry, defaultCurrency, loadingDefaultValues, defaultCategories} = useDefaultValues();
     const [products, setProducts] = useState([]);
@@ -59,21 +55,14 @@ export default function FrontHome() {
             setStatus("loading");
             setError(null);
 
-            const response = await getList("products", {
+            const normalized = await listProducts({
                 display: "full",
-                limit: 24,
                 sort: "[id_DESC]",
                 params: {
                     "price[price_ttc][use_tax]": 1,
                 },
-                filters
+                filters,
             });
-
-            if (!response?.data) {
-                throw new Error("Invalid response format");
-            }
-
-            const normalized = normalizeProducts(response.data);
 
             if (minPrice || maxPrice) {
                 const minPriceVal = minPrice ? parseFloat(minPrice) : null;
@@ -107,9 +96,8 @@ export default function FrontHome() {
                 setStatus("loading");
                 setError(null);
 
-                const response = await getList("products", {
+                const normalized = await listProducts({
                     display: "full",
-                    limit: 24,
                     sort: "[id_DESC]",
                     params: {
                         "price[price_ttc][use_tax]": 1,
@@ -117,33 +105,9 @@ export default function FrontHome() {
                     signal: controller.signal,
                 });
 
-                if (!response?.data) {
-                    throw new Error("Invalid response format");
-                }
+                const nextTaxRates = await buildTaxRateMapForProducts(normalized);
 
-                const normalized = normalizeProducts(response.data);
-                const groupIds = [
-                    ...new Set(
-                        normalized
-                            .map((product) => getScalarValue(product?.id_tax_rules_group))
-                            .filter(Boolean)
-                            .map((id) => String(id))
-                    ),
-                ];
-
-                const nextTaxRates = {};
-                await Promise.all(
-                    groupIds.map(async (groupId) => {
-                        try {
-                            const rate = await getTaxRateForGroup(groupId);
-                            nextTaxRates[groupId] = rate || 0;
-                        } catch {
-                            nextTaxRates[groupId] = 0;
-                        }
-                    })
-                );
-
-                setTaxRatesByGroup(nextTaxRates);
+                setTaxRatesByGroup(nextTaxRates || {});
                 setProducts(normalized);
                 setStatus("success");
             } catch (err) {

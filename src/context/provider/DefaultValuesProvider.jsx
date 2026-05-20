@@ -1,9 +1,6 @@
 import {useEffect, useMemo, useState} from "react";
 import {CartContext, DefaultValuesContext} from "../AppContext.jsx";
-import {getList} from "../../api/prestashopCrud.js";
-
-const DEFAULT_COUNTRY_ID = "8";
-const DEFAULT_CURRENCY_ID = "1";
+import {fetchDefaultValues} from "../../service/default-values-service.js";
 
 export function DefaultValuesProvider({children}) {
     const [loadingDefaultValues, setLoadingDefaultValues] = useState(true);
@@ -19,44 +16,10 @@ export function DefaultValuesProvider({children}) {
         async function loadDefaultValues() {
             setLoadingDefaultValues(true);
             try {
-                const [countryResponse, currencyResponse, categoriesResponse] = await Promise.all(
-                    [
-                        getList("countries", {
-                            display: "full",
-                            filters: {id: DEFAULT_COUNTRY_ID},
-                            signal: controller.signal,
-                        }),
-                        getList("currencies", {
-                            display: "full",
-                            filters: {id: DEFAULT_CURRENCY_ID},
-                            signal: controller.signal,
-                        }),
-                        getList("categories", {
-                            display: "full",
-                            sort: "[id_ASC]",
-                            signal: controller.signal,
-                        })
-                    ]
-                )
-
-                if (countryResponse && currencyResponse && categoriesResponse) {
-                    const countryResult = countryResponse?.data?.countries?.country;
-
-                    if (countryResult.length > 0) {
-                        setDefaultCountry(countryResult[0]);
-                    }
-                    const currencyResult = currencyResponse?.data?.currencies?.currency;
-
-                    if (currencyResult.length > 0) {
-                        setDefaultCurrency(currencyResult[0]);
-                    }
-
-                    const categoryResult = categoriesResponse?.data?.categories?.category;
-
-                    if (categoryResult.length > 0) {
-                        setDefaultCategories(categoryResult);
-                    }
-                }
+                const result = await fetchDefaultValues({signal: controller.signal});
+                setDefaultCountry(result.country ?? null);
+                setDefaultCurrency(result.currency ?? null);
+                setDefaultCategories(result.categories ?? []);
             } catch (error) {
                 console.log(error)
                 setErrors(error);

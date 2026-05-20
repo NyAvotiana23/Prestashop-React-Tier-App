@@ -2,15 +2,9 @@ import React, {useEffect, useRef, useState} from 'react';
 import {useCustomerUser} from "../../hooks/useCustomerUser.jsx";
 import {useLocation, useNavigate} from "react-router-dom";
 import { ensureCustomerAnonym} from "../../csv/mappings/csvOrderMapping.js";
-import {getList} from "../../api/prestashopCrud.js";
-import {ensureArray, getScalarValue} from "../../utils/util-functions.js";
+import {getScalarValue} from "../../utils/util-functions.js";
 import {ANONYM_CUSTOMER_EMAIL} from "../../csv/mappings/csvOrderMapping.js";
-
-function normalizeCustomers(data) {
-    if (!data || typeof data !== "object") return [];
-    const ordersNode = data?.customers?.customer ?? data?.customers ?? data?.customer ?? [];
-    return ensureArray(ordersNode);
-}
+import {listCustomers} from "../../service/customer-service.js";
 
 function FrontSelectUser(props) {
     const {login} = useCustomerUser();
@@ -26,12 +20,12 @@ function FrontSelectUser(props) {
         const controller = new AbortController();
 
         async function loadCustomers() {
-            const customersResponse = await getList("customers", {
+            const items = await listCustomers({
                 display: "full",
-                order: "[id_ASC]",
+                sort: "[id_ASC]",
                 signal: controller.signal,
-            })
-            setCustomers(normalizeCustomers(customersResponse?.data));
+            });
+            setCustomers(items);
         }
 
         loadCustomers();

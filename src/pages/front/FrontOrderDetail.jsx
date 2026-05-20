@@ -2,41 +2,15 @@ import {useEffect, useMemo, useState} from "react";
 import {Link, useParams} from "react-router-dom";
 import Loading from "../../components/shared/Loading.jsx";
 import StatusBanner from "../../components/shared/StatusBanner.jsx";
-import {getById, getList} from "../../api/prestashopCrud.js";
 import {
     ensureArray,
+    formatMoney,
     getLanguageText,
     getScalarValue,
     isAbortError,
 } from "../../utils/util-functions.js";
 import {useCustomerUser} from "../../hooks/useCustomerUser.jsx";
-
-function formatMoney(value) {
-    const amount = Number.parseFloat(getScalarValue(value) || "");
-    return Number.isFinite(amount) ? amount.toFixed(2) : "N/A";
-}
-
-function normalizeOrderPayments(data) {
-    if (!data || typeof data !== "object") return [];
-
-    const ordersNode =
-        data?.order_payments?.order_payment ??
-        data?.order_payments ??
-        data?.order_payment ??
-        [];
-    return ensureArray(ordersNode);
-}
-
-function normalizeOrderInvoices(data) {
-    if (!data || typeof data !== "object") return [];
-
-    const ordersNode =
-        data?.order_invoices?.order_invoice ??
-        data?.order_invoices ??
-        data?.order_invoice ??
-        [];
-    return ensureArray(ordersNode);
-}
+import {fetchOrderDetail, fetchOrderStatesMap} from "../../service/order-service.js";
 
 export default function FrontOrderDetail() {
     const {orderId} = useParams();
@@ -58,11 +32,10 @@ export default function FrontOrderDetail() {
                 setStatus("loading");
                 setError(null);
 
-                const response = await getById("orders", orderId, {
+                const detail = await fetchOrderDetail(orderId, {
                     signal: controller.signal,
                 });
-
-                const nextOrder = response?.data?.order ?? null;
+                const nextOrder = detail.order;
 
                 if (!nextOrder) {
                     setOrder(null);
@@ -83,51 +56,9 @@ export default function FrontOrderDetail() {
                     return;
                 }
 
-                const orderReference = getScalarValue(nextOrder?.reference);
-                const orderIdValue = getScalarValue(nextOrder?.id);
-
-                const [paymentsResponse, invoicesResponse, statesResponse] =
-                    await Promise.all([
-                        orderReference
-                            ? getList("order_payments", {
-                                display: "full",
-                                filters: {order_reference: orderReference},
-                                limit: 50,
-                                sort: "[id_ASC]",
-                                signal: controller.signal,
-                            })
-                            : Promise.resolve(null),
-                        orderIdValue
-                            ? getList("order_invoices", {
-                                display: "full",
-                                filters: {id_order: orderIdValue},
-                                limit: 50,
-                                sort: "[id_ASC]",
-                                signal: controller.signal,
-                            })
-                            : Promise.resolve(null),
-                        getList("order_states", {
-                            display: "full",
-                            limit: "0,100",
-                            signal: controller.signal,
-                        }),
-                    ]);
-
-                const paymentsItems = normalizeOrderPayments(paymentsResponse?.data);
-                const invoicesItems = normalizeOrderInvoices(invoicesResponse?.data);
-                const stateItems = ensureArray(
-                    statesResponse?.data?.order_states?.order_state ?? []
-                );
-
-                const nextStateMap = stateItems.reduce((acc, state) => {
-                    const id = getScalarValue(state?.id);
-                    const name = getLanguageText(state?.name);
-                    if (id) acc[id] = name || "Etat";
-                    return acc;
-                }, {});
-
-                setOrderPayments(paymentsItems);
-                setOrderInvoices(invoicesItems);
+                const nextStateMap = await fetchOrderStatesMap({signal: controller.signal});
+                setOrderPayments(detail.payments);
+                setOrderInvoices(detail.invoices);
                 setOrderStates(nextStateMap);
                 setOrder(nextOrder);
                 setStatus("success");

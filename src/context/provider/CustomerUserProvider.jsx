@@ -1,6 +1,6 @@
 import {useEffect, useMemo, useState} from "react";
-import {getList} from "../../api/prestashopCrud.js";
-import {ensureArray, getScalarValue} from "../../utils/util-functions.js";
+import {getScalarValue} from "../../utils/util-functions.js";
+import {findCustomerByEmail} from "../../service/customer-service.js";
 import {CustomerUserContext} from "../AppContext.jsx";
 import {ANONYM_CUSTOMER_EMAIL} from "../../csv/mappings/csvOrderMapping.js";
 
@@ -46,20 +46,7 @@ export function CustomerUserProvider({children}) {
             return {ok: false, error: "Email requis."};
         }
 
-        const response = await getList("customers", {
-            display: "full",
-            filters: {email: normalizedEmail},
-            limit: "0,5",
-        });
-
-        const customers = ensureArray(
-            response?.data?.customers?.customer ?? response?.data?.customers ?? []
-        );
-
-        const match = customers.find((customer) => {
-            const customerEmail = String(getScalarValue(customer?.email) ?? "").toLowerCase();
-            return customerEmail === normalizedEmail;
-        });
+        const match = await findCustomerByEmail(normalizedEmail);
 
         if (!match) {
             return {ok: false, error: "Client introuvable."};

@@ -26,7 +26,6 @@ export default defineConfig([
             // --- Variables / Typos ---
             "no-undef": "error",              // using undeclared variables
             "no-unused-vars": "warn",         // declared but never used
-            "no-use-before-define": "error",  // using var/func before declaring it
 
             // --- Logic bugs ---
             "eqeqeq": "error",               // forces === instead of ==

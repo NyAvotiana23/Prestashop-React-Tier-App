@@ -1,22 +1,15 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {getList, patchResource} from "../../api/prestashopCrud.js";
-import {ensureArray, getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
-import {createStockMvt} from "../../csv/mappings/csvMappingUtils.js";
 import {getDateTimeString, parseDateToString} from "../../utils/date-utils.jsx";
-
-// ─── Normalisers ────────────────────────────────────────────────────────────
-
-function normalizeProducts(data) {
-    if (!data || typeof data !== "object") return [];
-    const productsNode = data?.products?.product ?? data?.products ?? data?.product ?? [];
-    return ensureArray(productsNode);
-}
-
-function normalizeStockAvailables(data) {
-    if (!data || typeof data !== "object") return [];
-    const node = data?.stock_availables?.stock_available ?? data?.stock_availables ?? data?.stock_available ?? [];
-    return ensureArray(node);
-}
+import {getProductWholesalePrice} from "../../service/product-service.js";
+import {
+    buildVariantLabelMapFromCombinationIds,
+    createStockMovement,
+    fetchProductReferences,
+    fetchProducts,
+    fetchStockAvailables,
+    updateStockAvailableQuantity,
+} from "../../service/stock-service.js";
+import {getLanguageText, getScalarValue, isAbortError, toDateTimeLocalValue} from "../../utils/util-functions.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -45,12 +38,6 @@ function getQtyColor(qty) {
 function formatPriceTe(value) {
     const parsed = parseFloat(value);
     return Number.isFinite(parsed) ? parsed.toFixed(6) : "0.000000";
-}
-
-function toDateTimeLocalValue(dateTimeStr) {
-    if (!dateTimeStr) return "";
-    const withT = dateTimeStr.includes(" ") ? dateTimeStr.replace(" ", "T") : dateTimeStr;
-    return withT.slice(0, 16);
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -87,13 +74,7 @@ function PatchModal({stock, productRef, variantLabel, onClose, onPatch}) {
             const productId = getScalarValue(stock?.id_product);
             if (!productId) return;
             try {
-                const productResponse = await getList("products", {
-                    display: "[id,wholesale_price]",
-                    filters: {id: productId},
-                    limit: "0,1",
-                });
-                const product = normalizeProducts(productResponse?.data ?? productResponse)[0];
-                const wholesalePrice = getScalarValue(product?.wholesale_price);
+                    const wholesalePrice = await getProductWholesalePrice(productId);
                 if (!cancelled && wholesalePrice) {
                     setPriceTe(String(wholesalePrice));
                 }
@@ -127,30 +108,14 @@ function PatchModal({stock, productRef, variantLabel, onClose, onPatch}) {
         setLoading(true);
         setError(null);
         try {
-            const stockId = getScalarValue(stock?.id);
-            const productId = getScalarValue(stock?.id_product);
-            const attrId = getScalarValue(stock?.id_product_attribute) || "0";
-            if (!productId) {
-                throw new Error("Id produit introuvable.");
-            }
-
             const newQty = currentQty + Number(delta);
-            await patchResource("stock_availables", stockId, {
-                stock_available: {
-                    id: stockId,
-                    id_product: productId,
-                    id_product_attribute: attrId,
-                    quantity: String(newQty),
-                    depends_on_stock: getScalarValue(stock?.depends_on_stock) || "0",
-                    out_of_stock: getScalarValue(stock?.out_of_stock) || "0",
-                },
-            });
+            const stockId = await updateStockAvailableQuantity(stock, newQty);
 
             onPatch(stockId, newQty);
 
-            await createStockMvt({
-                id_product: productId,
-                id_product_attribute: attrId,
+            await createStockMovement({
+                id_product: getScalarValue(stock?.id_product),
+                id_product_attribute: getScalarValue(stock?.id_product_attribute) || "0",
                 id_stock: stockId,
                 date_add: normalizedDate,
                 quantity: String(deltaNum),
@@ -365,12 +330,11 @@ function StockAvailable() {
             setError(null);
 
             // 1. Fetch all product IDs
-            const productIdsResponse = await getList("products", {
+            const productResult = await fetchProducts({
                 display: "[id]",
                 sort: "[id_ASC]",
                 signal,
             });
-            const productResult = normalizeProducts(productIdsResponse?.data ?? productIdsResponse);
             const idStr = productResult.map(p => getScalarValue(p?.id)).join("|");
 
             if (!idStr) {
@@ -380,14 +344,12 @@ function StockAvailable() {
             }
 
             // 2. Fetch all stock_availables for those products
-            const stockResponse = await getList("stock_availables", {
+            const stockResult = await fetchStockAvailables({
                 display: "full",
                 sort: "[id_ASC]",
                 filters: {id_product: `[${idStr}]`},
                 signal,
             });
-
-            const stockResult = normalizeStockAvailables(stockResponse?.data ?? stockResponse);
             setStockAvailable(stockResult);
             setStatus("success");
 
@@ -437,17 +399,9 @@ function StockAvailable() {
         missingIds.forEach(id => { productRefCache.current[id] = null; });
 
         try {
-            const response = await getList("products", {
-                display: "[id,reference]",
-                filters: {id: `[${missingIds.join("|")}]`},
-                limit: `0,${missingIds.length}`,
-                signal,
-            });
-            const products = normalizeProducts(response?.data ?? response);
-            products.forEach(p => {
-                const id = getScalarValue(p?.id);
-                const ref = getScalarValue(p?.reference);
-                if (id) productRefCache.current[id] = ref || `#${id}`;
+            const refs = await fetchProductReferences(missingIds, {signal});
+            Object.entries(refs).forEach(([id, ref]) => {
+                productRefCache.current[id] = ref;
             });
             bumpCache();
         } catch (err) {
@@ -472,97 +426,9 @@ function StockAvailable() {
 
         try {
             // Step B-1: Fetch combinations in one batch
-            const combResponse = await getList("combinations", {
-                display: "full",
-                filters: {id: `[${missingAttrIds.join("|")}]`},
-                limit: `0,${missingAttrIds.length}`,
-                signal,
-            });
-            const combinations = ensureArray(
-                combResponse?.data?.combinations?.combination ?? []
-            );
-
-            // Step B-2: Collect all option value IDs across all combinations
-            const optionValueIds = new Set();
-            combinations.forEach(comb => {
-                const values = ensureArray(
-                    comb?.associations?.product_option_values?.product_option_value ?? []
-                );
-                values.forEach(v => {
-                    const vid = getScalarValue(v?.id ?? v);
-                    if (vid) optionValueIds.add(vid);
-                });
-            });
-
-            if (!optionValueIds.size) return;
-
-            // Step B-3: Fetch option values in one batch
-            const ovResponse = await getList("product_option_values", {
-                display: "full",
-                filters: {id: `[${[...optionValueIds].join("|")}]`},
-                limit: `0,${optionValueIds.size}`,
-                signal,
-            });
-            const optionValues = ensureArray(
-                ovResponse?.data?.product_option_values?.product_option_value ?? []
-            );
-
-            // Build valueId → { name, groupId } map
-            const optionValueMap = {};
-            const groupIds = new Set();
-            optionValues.forEach(ov => {
-                const ovId = getScalarValue(ov?.id);
-                const groupId = getScalarValue(ov?.id_attribute_group);
-                if (ovId) {
-                    optionValueMap[String(ovId)] = {
-                        name: getLanguageText(ov?.name) || String(ovId),
-                        groupId: groupId ? String(groupId) : "",
-                    };
-                }
-                if (groupId) groupIds.add(String(groupId));
-            });
-
-            // Step B-4: Fetch attribute groups in one batch
-            const optionGroupMap = {};
-            if (groupIds.size > 0) {
-                const grpResponse = await getList("product_options", {
-                    display: "full",
-                    filters: {id: `[${[...groupIds].join("|")}]`},
-                    limit: `0,${groupIds.size}`,
-                    signal,
-                });
-                const groups = ensureArray(
-                    grpResponse?.data?.product_options?.product_option ?? []
-                );
-                groups.forEach(g => {
-                    const gid = getScalarValue(g?.id);
-                    if (gid) {
-                        optionGroupMap[String(gid)] = getLanguageText(g?.name) || `Option ${gid}`;
-                    }
-                });
-            }
-
-            // Step B-5: Build label strings and store in cache
-            combinations.forEach(comb => {
-                const combId = getScalarValue(comb?.id);
-                if (!combId) return;
-
-                const values = ensureArray(
-                    comb?.associations?.product_option_values?.product_option_value ?? []
-                );
-                const parts = values
-                    .map(v => {
-                        const vid = getScalarValue(v?.id ?? v);
-                        const ov = optionValueMap[String(vid)];
-                        if (!ov) return null;
-                        const groupName = optionGroupMap[ov.groupId] || "";
-                        return groupName ? `${groupName}: ${ov.name}` : ov.name;
-                    })
-                    .filter(Boolean);
-
-                variantLabelCache.current[String(combId)] = parts.length
-                    ? parts.join(" · ")
-                    : `#${combId}`;
+            const labels = await buildVariantLabelMapFromCombinationIds(missingAttrIds, {signal});
+            Object.entries(labels).forEach(([id, label]) => {
+                variantLabelCache.current[String(id)] = label;
             });
 
             bumpCache();

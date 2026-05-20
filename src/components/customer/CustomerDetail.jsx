@@ -1,6 +1,6 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {Link, useParams} from "react-router-dom";
-import {getById} from "../../api/prestashopCrud.js";
+import {getCustomerById} from "../../service/customer-service.js";
 import {getScalarValue, isAbortError} from "../../utils/util-functions.js";
 import Loading from "../shared/Loading.jsx";
 import StatusBanner from "../shared/StatusBanner.jsx";
@@ -26,11 +26,9 @@ function CustomerDetail(props) {
                 setError(null);
                 setSuccessMessage("");
 
-                const response = await getById("customers", customerId, {
+                const resultCustomer = await getCustomerById(customerId, {
                     signal: controller.signal,
                 });
-
-                const resultCustomer = response?.data?.customer ?? null;
                 setCustomer(resultCustomer);
                 setStatus("success");
                 setSuccessMessage(resultCustomer ? "Customer loaded successfully." : "Customer not found.");

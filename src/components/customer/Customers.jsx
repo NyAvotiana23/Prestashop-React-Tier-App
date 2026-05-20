@@ -1,16 +1,9 @@
 import React, {useEffect, useState} from 'react';
-import {ensureArray, getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
-import {getList} from "../../api/prestashopCrud.js";
+import {getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
+import {listCustomers} from "../../service/customer-service.js";
 import Loading from "../shared/Loading.jsx";
 import StatusBanner from "../shared/StatusBanner.jsx";
 import {Link} from "react-router-dom";
-
-function normalizeCustomers(data) {
-    if (!data || typeof data !== "object") return [];
-
-    const customerNode = data?.customers?.customer ?? data?.customers ?? data?.customer ?? [];
-    return ensureArray(customerNode);
-}
 
 function Customers() {
     const [customers, setCustomers] = useState([]);
@@ -27,23 +20,13 @@ function Customers() {
                 setError(null);
                 setSuccessMessage("");
 
-                const response = await getList("customers", {
+                const items = await listCustomers({
                     display: "full",
                     limit: 50,
                     sort: "[id_ASC]",
                     signal: controller.signal,
                 });
 
-                const items = normalizeCustomers(response?.data);
-
-                // Fix #4: the real failure case is an unexpected shape (not a missing
-                // array — normalizeCustomers always returns an array). Detect it by
-                // checking whether data itself is present at all.
-                if (!response?.data) {
-                    setError(new Error("Invalid response format"));
-                    setStatus("error");
-                    return;
-                }
 
                 setCustomers(items);
                 setStatus("success");

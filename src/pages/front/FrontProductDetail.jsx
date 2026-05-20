@@ -1,19 +1,22 @@
 import {useEffect, useState} from "react";
 import {Link, useParams} from "react-router-dom";
-import {getById, getList} from "../../api/prestashopCrud.js";
 import {
     ensureArray,
     getLanguageText,
     getScalarValue,
     isAbortError,
-    isProductDateHot, isProductDateNew
 } from "../../utils/util-functions.js";
 import Loading from "../../components/shared/Loading.jsx";
 import StatusBanner from "../../components/shared/StatusBanner.jsx";
 import {useCart} from "../../hooks/useCart.jsx";
-import {getTaxRateForGroup} from "../../csv/mappings/csvMappingUtils.js";
 import {useDefaultValues} from "../../hooks/useDefaultValues.jsx";
 import {HotBadge, NewBadge} from "../../utils/util-components.jsx";
+import {
+    fetchProductDetailExtras,
+    getProductById,
+    isProductDateHot,
+    isProductDateNew
+} from "../../service/product-service.js";
 
 export default function FrontProductDetail() {
     const {productId} = useParams();
@@ -28,6 +31,14 @@ export default function FrontProductDetail() {
 
     function getCombinationQty(combinationId) {
         return combinationQuantities[String(combinationId)] ?? 1;
+    }
+
+    function clampQty(value, max) {
+        const numeric = Number(value);
+        const normalized = Number.isFinite(numeric) && numeric > 0 ? numeric : 1;
+        if (max === null || max === undefined) return Math.max(1, normalized);
+        const cap = Math.max(0, Number(max) || 0);
+        return Math.min(normalized, cap);
     }
 
     function setCombinationQty(combinationId, value, max) {
@@ -51,11 +62,9 @@ export default function FrontProductDetail() {
                 setStatus("loading");
                 setError(null);
 
-                const response = await getById("products", productId, {
+                const nextProduct = await getProductById(productId, {
                     signal: controller.signal,
                 });
-
-                const nextProduct = response?.data?.product ?? null;
                 setProduct(nextProduct);
                 setStatus("success");
             } catch (err) {
@@ -76,101 +85,15 @@ export default function FrontProductDetail() {
             if (!product) return;
 
             try {
-                const productId = getScalarValue(product?.id);
-                const taxRulesGroupId = getScalarValue(product?.id_tax_rules_group);
-                const nextTaxRate = await getTaxRateForGroup(taxRulesGroupId);
-                setTaxRate(nextTaxRate || 0);
-
-                const stockResponse = await getList("stock_availables", {
-                    display: "full",
-                    filters: {id_product: productId},
-                    limit: "0,200",
+                const extras = await fetchProductDetailExtras(product, {
                     signal: controller.signal,
                 });
-                const stockItems = ensureArray(stockResponse?.data?.stock_availables?.stock_available ?? []);
-                const nextStockByAttribute = {};
-                stockItems.forEach((item) => {
-                    const attributeId = getScalarValue(item?.id_product_attribute) || "0";
-                    nextStockByAttribute[String(attributeId)] = Number(getScalarValue(item?.quantity) || 0);
-                });
-                setStockByAttribute(nextStockByAttribute);
-
-                const combinationsResponse = await getList("combinations", {
-                    display: "full",
-                    filters: {id_product: productId},
-                    limit: "0,200",
-                    signal: controller.signal,
-                });
-                const nextCombinations = ensureArray(
-                    combinationsResponse?.data?.combinations?.combination ?? []
-                );
-                setCombinations(nextCombinations);
-
-                const optionValueIds = new Set();
-                nextCombinations.forEach((combination) => {
-                    const values = ensureArray(
-                        combination?.associations?.product_option_values?.product_option_value ?? []
-                    );
-                    values.forEach((value) => {
-                        const valueId = getScalarValue(value?.id ?? value);
-                        if (valueId) optionValueIds.add(String(valueId));
-                    });
-                });
-
-                if (optionValueIds.size > 0) {
-                    const optionValuesResponse = await getList("product_option_values", {
-                        display: "full",
-                        filters: {id: `[${[...optionValueIds].join("|")}]`},
-                        limit: `0,${optionValueIds.size}`,
-                        signal: controller.signal,
-                    });
-                    const optionValues = ensureArray(
-                        optionValuesResponse?.data?.product_option_values?.product_option_value ?? []
-                    );
-                    const nextOptionValueMap = {};
-                    const groupIds = new Set();
-                    optionValues.forEach((optionValue) => {
-                        const optionValueId = getScalarValue(optionValue?.id);
-                        const groupId = getScalarValue(optionValue?.id_attribute_group);
-                        if (optionValueId) {
-                            nextOptionValueMap[String(optionValueId)] = {
-                                name: getLanguageText(optionValue?.name),
-                                groupId: groupId ? String(groupId) : "",
-                            };
-                        }
-                        if (groupId) groupIds.add(String(groupId));
-                    });
-                    setOptionValueMap(nextOptionValueMap);
-
-                    if (groupIds.size > 0) {
-                        const groupsResponse = await getList("product_options", {
-                            display: "full",
-                            filters: {id: `[${[...groupIds].join("|")}]`},
-                            limit: `0,${groupIds.size}`,
-                            signal: controller.signal,
-                        });
-                        const groups = ensureArray(
-                            groupsResponse?.data?.product_options?.product_option ?? []
-                        );
-                        const nextOptionGroupMap = {};
-                        groups.forEach((group) => {
-                            const groupId = getScalarValue(group?.id);
-                            if (!groupId) return;
-                            nextOptionGroupMap[String(groupId)] =
-                                getLanguageText(group?.name) || `Option ${groupId}`;
-                        });
-                        setOptionGroupMap(nextOptionGroupMap);
-                    }
-                } else {
-                    setOptionValueMap({});
-                    setOptionGroupMap({});
-                }
-
-                const imageNodes = ensureArray(product?.associations?.images?.image ?? []);
-                const nextImageIds = imageNodes
-                    .map((image) => getScalarValue(image?.id ?? image))
-                    .filter(Boolean);
-                setImageIds(nextImageIds);
+                setTaxRate(extras.taxRate || 0);
+                setStockByAttribute(extras.stockByAttribute || {});
+                setCombinations(extras.combinations || []);
+                setOptionValueMap(extras.optionValueMap || {});
+                setOptionGroupMap(extras.optionGroupMap || {});
+                setImageIds(extras.imageIds || []);
             } catch (err) {
                 if (isAbortError(err, controller.signal)) return;
             }
@@ -216,13 +139,7 @@ export default function FrontProductDetail() {
 
     const baseStock = stockByAttribute["0"] ?? null;
 
-    function clampQty(value, max) {
-        const numeric = Number(value);
-        const normalized = Number.isFinite(numeric) && numeric > 0 ? numeric : 1;
-        if (max === null || max === undefined) return Math.max(1, normalized);
-        const cap = Math.max(0, Number(max) || 0);
-        return Math.min(normalized, cap);
-    }
+
 
     function buildImageUrl(productId, imageId) {
         if (!imageBaseUrl || !productId || !imageId) return "";
@@ -350,7 +267,9 @@ export default function FrontProductDetail() {
                             const combinationTtc = combinationHt * taxMultiplier;
                             const combinationStock =
                                 stockByAttribute[String(combinationId)] ?? null;
+
                             const labels = buildCombinationLabels(combination);
+
                             const variantLabel = labels
                                 .map((item) => `${item.groupName}: ${item.valueName}`)
                                 .join(" · ");
