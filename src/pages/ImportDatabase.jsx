@@ -7,12 +7,22 @@ import {parseCsvText} from "../csv/csvImportUtils.js";
 import {importImagesFromZip} from "../csv/mappings/imageMappingZip.js";
 
 function ImportDatabase() {
+
+    const [importImage, setImportImage] = useState(false);
+
+    function handleChangeImportImage () {
+        setImportImage(!importImage);
+    }
+
+
+
     const importRows = [
         {ref: "products", name: "Products", type: "csv"},
         {ref: "combinations", name: "Combinations", type: "csv"},
         {ref: "orders", name: "Orders", type: "csv"},
         {ref: "images_zip", name: "Images (ZIP)", type: "zip"},
     ];
+
     const rowByRef = Object.fromEntries(importRows.map((row) => [row.ref, row]));
 
     const [checkedItems, setCheckedItems] = useState(
@@ -176,6 +186,12 @@ function ImportDatabase() {
         }
 
         for (const row of importRows) {
+            console.log(row);
+
+            if (row.ref === "images_zip" && !importImage) {
+                alert("Image import skipped");
+                continue;
+            }
             if (!checkedItems[row.ref]) continue;
             await handleImport(row.ref);
         }
@@ -193,6 +209,13 @@ function ImportDatabase() {
                 >
                     Import all
                 </button>
+                <label>Import image : {importImage ? "True" : "False"}</label>
+
+                <input
+                    type={"checkbox"}
+                    onChange={handleChangeImportImage}
+                    className="form-checkbox h-5 w-5 text-blue-600"
+                />
             </div>
             <div className="mb-4">
                 <table className="min-w-full bg-white border border-gray-200">

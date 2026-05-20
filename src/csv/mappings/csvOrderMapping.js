@@ -195,6 +195,32 @@ async function ensureCustomerAddress(customer, row) {
 
 // ─── Row processing ───────────────────────────────────────────────────────────
 
+function combineDuplicate (achat, achats) {
+    const result = {
+        reference: achat.reference,
+        quantity: 0,
+        variant: achat.variant,
+    };
+
+    for (const a of achats) {
+        if (a.reference === achat.reference && a.variant === achat.variant) {
+            result.quantity += a.quantity;
+        }
+    }
+    return result;
+}
+function ensureNoDuplicateAchat (achats) {
+    const  result = [];
+    const treated = new Set();
+    for (const achat of achats) {
+        if (!treated.has(achat.reference)) {
+            result.push(combineDuplicate(achat, achats));
+            treated.add(achat.reference);
+        }
+    }
+    return result;
+}
+
 export async function processOrderRow(row) {
     ensureOrderRow(row);
 
@@ -213,10 +239,11 @@ export async function processOrderRow(row) {
         };
     }
 
-    const achats = parseAchat(row?.achat);
+    let achats = parseAchat(row?.achat);
     if (!achats.length) {
         return {status: "skipped", reason: "Achat vide ou illisible", details: {achat: row?.achat}};
     }
+    achats = ensureNoDuplicateAchat(achats);
 
     // Build order items — reuse tax rate cache locally across achats in one row
     const taxRateLocalCache = {};
@@ -228,6 +255,7 @@ export async function processOrderRow(row) {
 
         const productId = getScalarValue(product?.id);
         const combinationId = await resolveCombinationId(productId, achat.variant);
+
         if (combinationId === null) {
             throw new Error(`Combinaison introuvable: ${achat.reference} / ${achat.variant}`);
         }

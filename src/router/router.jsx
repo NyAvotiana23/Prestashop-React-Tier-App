@@ -25,6 +25,7 @@ import {DefaultValuesProvider} from "../context/provider/DefaultValuesProvider.j
 import FrontCartHistory from "../pages/front/FrontCartHistory.jsx";
 import StockAvailable from "../components/stock/StockAvailable.jsx";
 import Statistics from "../pages/Statistics.jsx";
+import FrontOrderDuplication from "../pages/front/FrontOrderDuplication.jsx";
 
 export const router = createBrowserRouter([
     {
@@ -75,6 +76,7 @@ export const router = createBrowserRouter([
                     {path: "cart_histories", element: <FrontCartHistory/>},
                     {path: "orders", element: <FrontOrders/>},
                     {path: "orders/:orderId", element: <FrontOrderDetail/>},
+                    {path: "orders/duplicate/:orderId/:duplicateNumber", element: <FrontOrderDuplication/>},
                 ],
             },
         ],

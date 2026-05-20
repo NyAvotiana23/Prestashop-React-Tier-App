@@ -1,11 +1,13 @@
-import {useEffect, useState} from "react";
+import React, {useEffect, useState} from "react";
 import {Link} from "react-router-dom";
-import {getList} from "../../api/prestashopCrud.js";
+import {getList, patchResource} from "../../api/prestashopCrud.js";
 import {ensureArray, getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
 import Loading from "../../components/shared/Loading.jsx";
 import StatusBanner from "../../components/shared/StatusBanner.jsx";
 import {useCustomerUser} from "../../hooks/useCustomerUser.jsx";
 import {useDefaultValues} from "../../hooks/useDefaultValues.jsx";
+import {getDateTimeString, parseDateToString} from "../../utils/date-utils.jsx";
+import {createStockMvt} from "../../csv/mappings/csvMappingUtils.js";
 
 function normalizeOrders(data) {
     if (!data || typeof data !== "object") return [];
@@ -13,7 +15,36 @@ function normalizeOrders(data) {
     return ensureArray(ordersNode);
 }
 
+function PatchModal({order, onClose}) {
+    const [duplicatedNumber, setDuplicatedNumber] = useState(1);
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div
+                className="relative z-10 bg-white rounded-2xl shadow-xl w-full max-w-sm p-6"
+                onClick={e => e.stopPropagation()}
+            >
+                <div className="flex flex-col gap-3 mt-5">
+                    <label>Nombre de duplication : </label>
+                    <input type={"number"} value={duplicatedNumber}
+                           onChange={(e) => setDuplicatedNumber(e.target.value)}
+                           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-800"
+                    />
+                    <Link to={`/orders/duplicate/${getScalarValue(order?.id)}/${duplicatedNumber}`}
+                    className={"p-2 bg-red-300 rounded"}
+                    >
+                        Voir la fiche
+                    </Link>
+                    <button onClick={onClose} className={"p-2 bg-blue-200 rounded"}>Fermer</button>
+                </div>
+            </div>
+        </div>
+    )
+        ;
+}
+
 export default function FrontOrders() {
+
     const {defaultCountry, defaultCurrency, loadingDefaultValues} = useDefaultValues();
 
     const {customerUser} = useCustomerUser();
@@ -21,6 +52,14 @@ export default function FrontOrders() {
     const [orderStates, setOrderStates] = useState({});
     const [status, setStatus] = useState("idle");
     const [error, setError] = useState(null);
+
+    const [isOpenModal, setIsOpenModal] = useState(false);
+    const [selesctedOrders, setSelectedOrders] = useState(null);
+
+    function handleOnCloseModal() {
+        setIsOpenModal(false);
+        setSelectedOrders(null);
+    }
 
     useEffect(() => {
         const controller = new AbortController();
@@ -72,6 +111,11 @@ export default function FrontOrders() {
         return () => controller.abort();
     }, [customerUser]);
 
+    function openModal(e, order) {
+        setIsOpenModal(true);
+        setSelectedOrders(order);
+    }
+
     if (status === "loading") return <Loading>commandes</Loading>;
     if (status === "error") {
         return (
@@ -94,6 +138,7 @@ export default function FrontOrders() {
                 <p className="text-sm text-zinc-500">Etat et historique des commandes.</p>
             </header>
 
+
             <div className="space-y-4">
                 {orders.map((order) => {
                     const id = getScalarValue(order?.id);
@@ -104,29 +149,40 @@ export default function FrontOrders() {
                     const detailPath = id ? `/orders/${id}` : "/orders";
 
                     return (
-                        <Link
-                            key={id || reference}
-                            to={detailPath}
-                            className="block rounded border border-zinc-200 bg-white p-4 transition hover:border-zinc-300 hover:shadow-sm"
-                        >
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                                <div>
-                                    <p className="text-sm text-zinc-500">Commande #{reference}</p>
-                                    <p className="text-xs text-zinc-400">ID: {id}</p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-zinc-500">Total</p>
-                                    <p className="text-lg font-semibold text-emerald-600">{totalPaid}  {getLanguageText(defaultCurrency?.symbol)} </p>
-                                </div>
-                                <div>
-                                    <p className="text-sm text-zinc-500">Etat</p>
-                                    <p className="text-sm font-semibold text-zinc-800">{stateName}</p>
-                                </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <p className="text-sm text-zinc-500">Commande #{reference}</p>
+                                <p className="text-xs text-zinc-400">ID: {id}</p>
                             </div>
-                        </Link>
-                    );
+                            <div>
+                                <p className="text-sm text-zinc-500">Total</p>
+                                <p className="text-lg font-semibold text-emerald-600">{totalPaid} {getLanguageText(defaultCurrency?.symbol)} </p>
+                            </div>
+                            <div>
+                                <p className="text-sm text-zinc-500">Etat</p>
+                                <p className="text-sm font-semibold text-zinc-800">{stateName}</p>
+                            </div>
+                            <div>
+                                <button
+                                    onClick={(e) => openModal(e, order)}
+                                    className={"p-2 bg-green-500 rounded"}
+                                >Dupliquer
+                                </button>
+                            </div>
+                        </div>
+
+                    )
+                        ;
                 })}
             </div>
+            {isOpenModal && selesctedOrders !== null &&
+                (
+                    <PatchModal order={selesctedOrders} onClose={handleOnCloseModal}/>
+                )
+
+            }
+
         </section>
     );
 }

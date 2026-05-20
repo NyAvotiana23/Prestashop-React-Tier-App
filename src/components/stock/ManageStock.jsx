@@ -65,6 +65,30 @@ function ManageStock() {
         });
     }, [rows, search]);
 
+    const productTotals = useMemo(() => {
+        return filteredRows.reduce(
+            (acc, row) => {
+                acc.physical += row.physical;
+                acc.reserved += row.reserved;
+                acc.available += row.available;
+                return acc;
+            },
+            {physical: 0, reserved: 0, available: 0}
+        );
+    }, [filteredRows]);
+
+    const categoryTotals = useMemo(() => {
+        return categoryRows.reduce(
+            (acc, row) => {
+                acc.physical += row.physical;
+                acc.reserved += row.reserved;
+                acc.available += row.available;
+                return acc;
+            },
+            {physical: 0, reserved: 0, available: 0}
+        );
+    }, [categoryRows]);
+
     if (status === "loading") {
         return (
             <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
@@ -116,6 +140,11 @@ function ManageStock() {
             <div className="bg-white rounded-2xl shadow p-6">
                 <div className="flex flex-wrap items-center gap-3 mb-5">
                     <h2 className="text-lg font-semibold text-gray-700 flex-1">Stock par produit</h2>
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                        <span>Total physique: <span className="font-semibold text-gray-700">{formatNumber(productTotals.physical)}</span></span>
+                        <span>Reserve: <span className="font-semibold text-gray-700">{formatNumber(productTotals.reserved)}</span></span>
+                        <span>Disponible: <span className="font-semibold text-gray-700">{formatNumber(productTotals.available)}</span></span>
+                    </div>
                     <div className="relative">
                         <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none"
                              viewBox="0 0 24 24" stroke="currentColor">
@@ -180,7 +209,12 @@ function ManageStock() {
             <div className="bg-white rounded-2xl shadow p-6">
                 <div className="flex items-center justify-between mb-5">
                     <h2 className="text-lg font-semibold text-gray-700">Stock par categorie</h2>
-                    <span className="text-xs text-gray-400">{categoryRows.length} categorie(s)</span>
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                        <span>Total physique: <span className="font-semibold text-gray-700">{formatNumber(categoryTotals.physical)}</span></span>
+                        <span>Reserve: <span className="font-semibold text-gray-700">{formatNumber(categoryTotals.reserved)}</span></span>
+                        <span>Disponible: <span className="font-semibold text-gray-700">{formatNumber(categoryTotals.available)}</span></span>
+                        <span className="text-gray-400">{categoryRows.length} categorie(s)</span>
+                    </div>
                 </div>
 
                 <div className="overflow-x-auto">

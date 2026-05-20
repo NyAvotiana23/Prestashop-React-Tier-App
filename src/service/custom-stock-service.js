@@ -3,6 +3,8 @@ import { sendJson } from "../api/prestashopApi";
 
 const CUSTOM_ORDER_STATE_ENDPOINT = "custom_order_state";
 const ALLOWED_CUSTOM_ORDER_STATES = new Set([5, 6]);
+export const LIVRE_STATE_ID = 5;
+export const ANNULE_STATE_ID = 6;
 
 function toPositiveInt(value, fieldName) {
     const parsed = Number.parseInt(value, 10);

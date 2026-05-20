@@ -283,9 +283,10 @@ export async function fetchManageStockData({signal} = {}) {
             ? `${productName} — ${variantLabel}`
             : productName;
 
-        const physical = toNumber(stock?.quantity, 0);
+        const physicalRaw = toNumber(stock?.quantity, 0);
         const reserved = reservedByKey.get(`${productId}::${attrId}`) ?? 0;
-        const available = physical - reserved;
+        const physical = physicalRaw + reserved;
+        const available = physicalRaw;
 
         return {
             stockId,

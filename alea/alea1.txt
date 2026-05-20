@@ -1,0 +1,9 @@
+1) Import fichier =>
+Case à cocher  => importer ou nom les images
+
+
+2) Commande de client :
+    Etat de mes commande => à la ligne button pour dupliquer un commande
+    On click => Champ par defaut 1 2 3  => Isany le produit tsirairay avy lasa multiplier an'io
+    Rehefa mivalider amzay => appercue du nouveau commande => appercue du stock si available, appercue si manque de stock,
+    raha ampy tode afaka valider payer tode liver
