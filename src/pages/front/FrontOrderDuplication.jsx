@@ -4,17 +4,13 @@ import Loading from "../../components/shared/Loading.jsx";
 import {ensureArray, getScalarValue} from "../../utils/util-functions.js";
 import {getStockByProductIds} from "../../service/stock-service.js";
 import {useCustomerUser} from "../../hooks/useCustomerUser.jsx";
-import {getFirstId} from "../../csv/mappings/csvMappingUtils.js";
-import {getFirstCustomerAddress} from "../../service/customer-service.js";
+
 import {
-    buildOrderPayload,
     buildProductIdsFilterFromOrderRows,
-    createOrder, duplicateOrder,
+    duplicateOrder,
     getOrderById,
-    getOrderRows,
 } from "../../service/order-service.js";
-import {createNewCart} from "../../service/cart-service.js";
-import {LIVRE_STATE_ID, updateOrderState} from "../../service/custom-stock-service.js";
+import {LIVRE_STATE_ID} from "../../service/custom-stock-service.js";
 
 function FrontOrderDuplication(props) {
     const {orderId, duplicateNumber} = useParams();
@@ -28,16 +24,6 @@ function FrontOrderDuplication(props) {
     const [isValid, setIsValid] = useState(true);
 
     const {customerUser} = useCustomerUser();
-
-    function buildNewOrderItemsForCart() {
-        const orderRows = getOrderRows(order);
-        const items = orderRows.map((row) => ({
-            productId: getScalarValue(row?.product_id),
-            productAttributeId: getScalarValue(row?.product_attribute_id),
-            quantity: parseFloat(getScalarValue(row?.product_quantity)) * parseFloat(duplicateNumber),
-        }))
-        return items;
-    }
 
     async function handleValiderDuplication() {
         setLoading(true);

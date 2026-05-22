@@ -12,9 +12,9 @@ import {
     getCustomerAddressId,
     getCustomerAddresses,
 } from "../../service/customer-service.js";
-import { createNewCart, getFirstResourceId} from "../../service/cart-service.js";
+import {buildCartPayload, createNewCart} from "../../service/cart-service.js";
 import {buildOrderPayloadFromCart, buildOrderRowsFromItems, createOrder} from "../../service/order-service.js";
-import {recordStockMovementForOrderRow} from "../../service/stock-service.js";
+import {DEFAULT_CARRIER_ID, DEFAULT_CURRENCY_ID, DEFAULT_LANG_ID} from "../../service/default-values-service.js";
 
 const DEFAULT_COUNTRY_ID = "8";
 
@@ -40,6 +40,10 @@ function buildInitialAddressForm(customerUser) {
 }
 
 export default function FrontCart() {
+    const currencyId = DEFAULT_CURRENCY_ID;
+    const carrierId = DEFAULT_CARRIER_ID;
+    const langId = DEFAULT_LANG_ID;
+
     const {defaultCurrency} = useDefaultValues();
     const {items, updateQuantity, removeItem, clear, total} = useCart();
     const {customerUser} = useCustomerUser();
@@ -120,22 +124,6 @@ export default function FrontCart() {
             setIsSavingAddress(false);
         }
     }
-
-    async function buildCartPayload(addressId) {
-        const currencyId = (await getFirstResourceId("currencies")) || "1";
-        const carrierId = (await getFirstResourceId("carriers")) || "1";
-        const langId = "1";
-
-        return buildCartPayload({
-            items,
-            customerId: customerUser.id,
-            addressId,
-            currencyId,
-            carrierId,
-            langId,
-        });
-    }
-
     function handleCartClear () {
         if (!window.confirm("Reinitialiser la cart ?")) return;
         clear();
@@ -155,11 +143,24 @@ export default function FrontCart() {
         try {
             const customerId = customerUser.id;
             const addressId = selectedAddressId || (await getCustomerAddressId(customerId));
+
+
+
+
             if (!addressId) {
                 throw new Error("Aucune adresse trouvee pour ce client.");
             }
 
-            const cartPayload = await buildCartPayload(addressId);
+            const cartPayload = buildCartPayload(
+                {
+                    items,
+                    customerId: customerUser.id,
+                    addressId,
+                    currencyId,
+                    carrierId,
+                    langId,
+                }
+            );
             const cartId = await createNewCart(cartPayload);
 
             clear();
@@ -190,7 +191,16 @@ export default function FrontCart() {
                 throw new Error("Aucune adresse trouvee pour ce client.");
             }
 
-            const cartPayload = await buildCartPayload(addressId);
+            const cartPayload = buildCartPayload(
+                {
+                    items,
+                    customerId: customerUser.id,
+                    addressId,
+                    currencyId,
+                    carrierId,
+                    langId,
+                }
+            );
             const cartId = await createNewCart(cartPayload);
 
             const currencyId = cartPayload.cart.id_currency;
@@ -207,27 +217,28 @@ export default function FrontCart() {
                 carrierId,
                 totalPaid,
             });
+
             const orderId = await createOrder(orderPayload);
 
-            // Record a stock decrement movement for each ordered line
-            const dateAdd = getDateTimeString();
-            for (const row of enrichedRows) {
-                try {
-                    await recordStockMovementForOrderRow({
-                        productId: row._productId,
-                        combinationId: row._combinationId,
-                        orderId: orderId || "0",
-                        quantity: row._quantity,
-                        priceHt: row._priceHt,
-                        dateAdd,
-                    });
-                } catch (err) {
-                    console.error(
-                        `Stock movement failed for product ${row._productId} / combo ${row._combinationId}:`,
-                        err
-                    );
-                }
-            }
+            // // Record a stock decrement movement for each ordered line
+            // const dateAdd = getDateTimeString();
+            // for (const row of enrichedRows) {
+            //     try {
+            //         await recordStockMovementForOrderRow({
+            //             productId: row._productId,
+            //             combinationId: row._combinationId,
+            //             orderId: orderId || "0",
+            //             quantity: row._quantity,
+            //             priceHt: row._priceHt,
+            //             dateAdd,
+            //         });
+            //     } catch (err) {
+            //         console.error(
+            //             `Stock movement failed for product ${row._productId} / combo ${row._combinationId}:`,
+            //             err
+            //         );
+            //     }
+            // }
 
             clear();
             setSuccess("Commande creee avec paiement a la livraison.");

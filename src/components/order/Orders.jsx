@@ -2,11 +2,11 @@ import React, {useEffect, useState} from "react";
 import {Link} from "react-router-dom";
 import Loading from "../shared/Loading.jsx";
 import StatusBanner from "../shared/StatusBanner.jsx";
-import {formatMoney, getLanguageText, getScalarValue, isAbortError} from "../../utils/util-functions.js";
+import {formatMoney, getScalarValue, isAbortError} from "../../utils/util-functions.js";
 import {ORDER_STATE_FULL_OPTIONS} from "../../constants/order-states.js";
 import {updateOrderState} from "../../service/custom-stock-service.js";
 import {getCustomerAddressId} from "../../service/customer-service.js";
-import {getCartRows, getFirstResourceId, listCarts} from "../../service/cart-service.js";
+import {getCartRows,  listCarts} from "../../service/cart-service.js";
 import {
     buildOrderPayloadFromCart,
     buildOrderRowsFromCart,
@@ -14,6 +14,7 @@ import {
     deleteOrderById,
     listOrders,
 } from "../../service/order-service.js";
+import {getFirstResourceId} from "../../service/common-service.js";
 
 // ─── State definitions ────────────────────────────────────────────────────────
 

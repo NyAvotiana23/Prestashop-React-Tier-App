@@ -1,15 +1,20 @@
 import {useEffect, useState} from "react";
 import {useNavigate} from "react-router-dom";
 import {getScalarValue, isAbortError} from "../../utils/util-functions.js";
-import {getDateTimeString} from "../../utils/date-utils.jsx";
 import StatusBanner from "../../components/shared/StatusBanner.jsx";
 import {useCustomerUser} from "../../hooks/useCustomerUser.jsx";
-import {getCartRows, getFirstResourceId, listCustomerCarts} from "../../service/cart-service.js";
+import {getCartRows, listCustomerCarts} from "../../service/cart-service.js";
 import {getCustomerAddressId} from "../../service/customer-service.js";
 import {buildOrderPayloadFromCart, buildOrderRowsFromCart, createOrder, findOrderByCartId} from "../../service/order-service.js";
-import {recordStockMovementForOrderRow} from "../../service/stock-service.js";
+import {DEFAULT_CARRIER_ID, DEFAULT_CURRENCY_ID, DEFAULT_LANG_ID} from "../../service/default-values-service.js";
 
 function FrontCartHistory() {
+
+    const currencyId = DEFAULT_CURRENCY_ID;
+    const carrierId = DEFAULT_CARRIER_ID;
+    const langId = DEFAULT_LANG_ID;
+
+
     const {customerUser} = useCustomerUser();
     const [status, setStatus] = useState("idle");
     const [error, setError] = useState(null);
@@ -76,9 +81,7 @@ function FrontCartHistory() {
                 throw new Error("Aucune adresse trouvee pour ce panier.");
             }
 
-            const currencyId = getScalarValue(cart?.id_currency) || (await getFirstResourceId("currencies")) || "1";
-            const carrierId = getScalarValue(cart?.id_carrier) || (await getFirstResourceId("carriers")) || "1";
-            const langId = getScalarValue(cart?.id_lang) || "1";
+
             const customerId = getScalarValue(cart?.id_customer);
 
             const {orderRows, totalPaid, enrichedRows} = await buildOrderRowsFromCart(cart);
@@ -95,24 +98,24 @@ function FrontCartHistory() {
             const orderId = await createOrder(orderPayload);
 
             // Record a stock decrement movement for each ordered line
-            const dateAdd = getDateTimeString();
-            for (const row of enrichedRows) {
-                try {
-                    await recordStockMovementForOrderRow({
-                        productId: row._productId,
-                        combinationId: row._combinationId,
-                        orderId: orderId || "0",
-                        quantity: row._quantity,
-                        priceHt: row._priceHt,
-                        dateAdd,
-                    });
-                } catch (err) {
-                    console.error(
-                        `Stock movement failed for product ${row._productId} / combo ${row._combinationId}:`,
-                        err
-                    );
-                }
-            }
+            // const dateAdd = getDateTimeString();
+            // for (const row of enrichedRows) {
+            //     try {
+            //         await recordStockMovementForOrderRow({
+            //             productId: row._productId,
+            //             combinationId: row._combinationId,
+            //             orderId: orderId || "0",
+            //             quantity: row._quantity,
+            //             priceHt: row._priceHt,
+            //             dateAdd,
+            //         });
+            //     } catch (err) {
+            //         console.error(
+            //             `Stock movement failed for product ${row._productId} / combo ${row._combinationId}:`,
+            //             err
+            //         );
+            //     }
+            // }
 
             setSuccess(`Commande creee (ID: ${orderId || "?"}).`);
             setStatus("success");

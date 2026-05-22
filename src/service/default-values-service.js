@@ -1,9 +1,10 @@
 import {getList} from "../api/prestashopCrud.js";
 import {ensureArray} from "../utils/util-functions.js";
 
-const DEFAULT_COUNTRY_ID = "8";
-const DEFAULT_CURRENCY_ID = "1";
-
+export const DEFAULT_COUNTRY_ID = "8";
+export const DEFAULT_CURRENCY_ID = "1";
+export const DEFAULT_CARRIER_ID = "1";
+export const DEFAULT_LANG_ID = "1";
 export async function fetchDefaultValues({
     signal,
     countryId = DEFAULT_COUNTRY_ID,
@@ -38,5 +39,4 @@ export async function fetchDefaultValues({
     };
 }
 
-export {DEFAULT_COUNTRY_ID, DEFAULT_CURRENCY_ID};
 

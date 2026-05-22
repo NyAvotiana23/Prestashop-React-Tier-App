@@ -16,6 +16,38 @@ export function isProductDateHot(date) {
     return date.toDateString() === yesterday.toDateString();
 }
 
+
+export function calculateProductPriceTtx(priceHt, taxRate) {
+    const parsedPriceHt = parseFloat(priceHt) ?? 0;
+    const parsedTaxRate = Number(taxRate) || 0;
+    return (parsedPriceHt * (1 + parsedTaxRate / 100)).toFixed(2);
+}
+
+export async function listProductWithALlPricing() {
+    const productsResponse = await getList("products", {
+        display: "full",
+        sort: "[id_DESC]",
+        params: {
+            "price[price_ttc][use_tax]": 1,
+            "price[price_ht][use_tax]": 0
+        }
+    });
+    return normalizeProducts(productsResponse);
+}
+
+
+export async function listProductCombinationsWithALlPricing() {
+    const combinationsResponse = await getList("combinations", {
+        display: "full",
+        sort: "[id_DESC]",
+        params: {
+            "price[price_ttc][use_tax]": 1,
+            "price[price_ht][use_tax]": 0
+        }
+    });
+    return normalizeCombinations(combinationsResponse);
+}
+
 export function isProductDateNew(date) {
     date = new Date(date);
     const now = new Date(Date.now());
@@ -44,6 +76,12 @@ export async function getTaxRateForGroup(taxRulesGroupId) {
     return parseFloat(getScalarValue(tax?.rate) ?? "0");
 }
 
+export function normalizeCombinations(data) {
+    if (!data || typeof data !== "object") return [];
+    const node = data?.combinations?.combination ?? data?.combinations ?? data?.combination ?? [];
+    return ensureArray(node);
+}
+
 export function normalizeProducts(data) {
     if (!data || typeof data !== "object") return [];
     const node = data?.products?.product ?? data?.products ?? data?.product ?? [];
@@ -53,6 +91,7 @@ export function normalizeProducts(data) {
 export function getProductLabel(product) {
     return getLanguageText(product?.name) || getScalarValue(product?.name) || "";
 }
+
 export async function fetchProductDetailExtras(product, {signal} = {}) {
     if (!product) {
         return {
@@ -200,6 +239,7 @@ export function extractProductImageIds(product) {
         .map((image) => getScalarValue(image?.id ?? image))
         .filter(Boolean);
 }
+
 export async function getProductPricing(productId, combinationId) {
     const productResponse = await getList("products", {
         display: "full",
@@ -230,6 +270,7 @@ export async function getProductPricing(productId, combinationId) {
     const priceTtc = effectiveHt * (1 + taxRate / 100);
     return {priceHt: effectiveHt, priceTtc};
 }
+
 export function buildImageUrl(productId, imageId) {
     if (!imageBaseUrl || !productId || !imageId) return "";
     return `${imageBaseUrl}/images/products/${productId}/${imageId}${imageQuery}`;
@@ -330,24 +371,24 @@ export function groupSpecificPricesByProduct(specificPrices) {
 }
 
 export function buildSpecificPricePayload({
-    productId,
-    combinationId = 0,
-    price = -1,
-    reduction = 0,
-    reductionType = "percentage",
-    reductionTax = 1,
-    fromQuantity = 1,
-    idShopGroup = 0,
-    idShop = 1,
-    idCart = 0,
-    idCurrency = 0,
-    idCountry = 0,
-    idGroup = 0,
-    idCustomer = 0,
-    idSpecificPriceRule = 0,
-    from = "0000-00-00 00:00:00",
-    to = "0000-00-00 00:00:00",
-} = {}) {
+                                              productId,
+                                              combinationId = 0,
+                                              price = -1,
+                                              reduction = 0,
+                                              reductionType = "percentage",
+                                              reductionTax = 1,
+                                              fromQuantity = 1,
+                                              idShopGroup = 0,
+                                              idShop = 1,
+                                              idCart = 0,
+                                              idCurrency = 0,
+                                              idCountry = 0,
+                                              idGroup = 0,
+                                              idCustomer = 0,
+                                              idSpecificPriceRule = 0,
+                                              from = "0000-00-00 00:00:00",
+                                              to = "0000-00-00 00:00:00",
+                                          } = {}) {
     if (!productId) {
         throw new Error("productId is required to build a specific price payload");
     }
@@ -380,12 +421,12 @@ export async function createSpecificPrice(payload, options = {}) {
 }
 
 export async function createSpecificPriceReduction({
-    productId,
-    reduction,
-    reductionType = "percentage",
-    reductionTax = 1,
-    ...rest
-} = {}, options = {}) {
+                                                       productId,
+                                                       reduction,
+                                                       reductionType = "percentage",
+                                                       reductionTax = 1,
+                                                       ...rest
+                                                   } = {}, options = {}) {
     const payload = buildSpecificPricePayload({
         productId,
         reduction,

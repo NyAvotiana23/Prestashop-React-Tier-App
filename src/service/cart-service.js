@@ -1,4 +1,4 @@
-import {createResource, getList} from "../api/prestashopCrud.js";
+import {createResource, getById, getList} from "../api/prestashopCrud.js";
 import {ensureArray, getScalarValue} from "../utils/util-functions.js";
 
 export async function createNewCart (cart) {
@@ -33,6 +33,11 @@ export async function listCarts({display = "full", limit, sort, filters, params,
     return normalizeCarts(response?.data ?? response);
 }
 
+export async function getCartById(cartId, {signal} = {}) {
+    const response = await getById("carts", cartId, {signal});
+    return response?.data?.cart ?? null;
+}
+
 export async function listCustomerCarts(customerId, {signal} = {}) {
     const response = await getList("carts", {
         display: "full",
@@ -44,18 +49,7 @@ export async function listCustomerCarts(customerId, {signal} = {}) {
     return normalizeCarts(response?.data ?? response);
 }
 
-export async function getFirstResourceId(ref, {filters, signal} = {}) {
-    const response = await getList(ref, {
-        display: "[id]",
-        limit: "0,1",
-        filters,
-        signal,
-    });
-    const node = response?.data?.[ref]?.[ref.slice(0, -1)] ?? response?.data?.[ref] ?? [];
-    const items = ensureArray(node);
-    const first = items[0];
-    return getScalarValue(first?.id || first?.["@_id"]);
-}
+
 
 export function buildCartPayload({items, customerId, addressId, currencyId, carrierId, langId}) {
     return {

@@ -1,7 +1,7 @@
 import {ensureArray, getLanguageText, getScalarValue} from "../utils/util-functions.js";
 import {getProductById, getProductPricing} from "./product-service.js";
 import {createResource, deleteResource, getById, getList} from "../api/prestashopCrud.js";
-import {buildCartPayload, createNewCart} from "./cart-service.js";
+import {buildCartPayload, createNewCart, getCartById, getCartRows, listCarts} from "./cart-service.js";
 import {LIVRE_STATE_ID, updateOrderState} from "./custom-stock-service.js";
 import {checkStockFromOrderItems} from "./stock-service.js";
 
@@ -147,6 +147,26 @@ export async function createOrder(order) {
     }
     const created = await createResource("orders", orderPayload);
     return getScalarValue(created?.data?.order?.id);
+}
+
+export async function getTotalPriceToPaidByCart(cart) {
+    const cartRows = getCartRows(cart);
+
+    let result = {priceHt: 0, priceTtc: 0};
+    for (const row of cartRows) {
+        const productId = getScalarValue(row?.id_product);
+        const idProductAttribute = getScalarValue(row?.id_product_attribute);
+        const quantity = getScalarValue(row?.quantity);
+        const {priceHt, priceTtc} = await getProductPricing(productId, idProductAttribute);
+        result.priceTtc += priceTtc * Number(quantity);
+        result.priceHt += priceHt * Number(quantity);
+    }
+    return result;
+}
+
+export async function getTotalPriceToPaidByCartId(cartId) {
+    const cart = await getCartById(cartId);
+    return getTotalPriceToPaidByCart(cart);
 }
 
 export async function buildOrderRowsFromItems(items) {
@@ -320,10 +340,9 @@ export async function duplicateOrder(idOrder, quantityDuplication, nextState, ch
         console.log("Stock result : ", stockResult);
         if (!stockResult) {
             alert("Checking stock => stock is not enough !");
-            return ;
+            return;
         }
     }
-    if (true) return ;
 
     const items = orderRows.map((row) => ({
         productId: getScalarValue(row?.product_id),

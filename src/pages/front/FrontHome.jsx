@@ -22,14 +22,6 @@ import {
 
 
 export default function FrontHome() {
-
-
-
-    const imageBaseUrl = apiBaseUrl ? String(apiBaseUrl).replace(/\/+$/, "") : "";
-    const imageQuery = apiKey ? `?ws_key=${apiKey}` : "";
-
-
-
     const {defaultCountry, defaultCurrency, loadingDefaultValues, defaultCategories} = useDefaultValues();
     const [products, setProducts] = useState([]);
     const [status, setStatus] = useState("idle");

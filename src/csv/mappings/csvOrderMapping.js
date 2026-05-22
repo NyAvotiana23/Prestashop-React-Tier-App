@@ -353,20 +353,20 @@ export async function processOrderRow(row) {
             total_products: String(totalPaid),
             total_products_wt: String(totalPaid),
             conversion_rate: "1",
-            associations: {
-                order_rows: {
-                    order_row: items.map((item) => ({
-                        product_id: getScalarValue(item.product?.id),
-                        product_attribute_id: item.combinationId || "0",
-                        product_quantity: item.quantity,
-                        product_name: getLanguageText(item.product?.name) || "Produit",
-                        product_reference: getScalarValue(item.product?.reference) || "",
-                        product_price: item.priceTtc.toFixed(6),
-                        unit_price_tax_incl: item.priceTtc.toFixed(6),
-                        unit_price_tax_excl: item.priceHt.toFixed(6),
-                    })),
-                },
-            },
+            // associations: {
+            //     order_rows: {
+            //         order_row: items.map((item) => ({
+            //             product_id: getScalarValue(item.product?.id),
+            //             product_attribute_id: item.combinationId || "0",
+            //             product_quantity: item.quantity,
+            //             product_name: getLanguageText(item.product?.name) || "Produit",
+            //             product_reference: getScalarValue(item.product?.reference) || "",
+            //             product_price: item.priceTtc.toFixed(6),
+            //             unit_price_tax_incl: item.priceTtc.toFixed(6),
+            //             unit_price_tax_excl: item.priceHt.toFixed(6),
+            //         })),
+            //     },
+            // },
         },
     };
 
