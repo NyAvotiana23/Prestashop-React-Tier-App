@@ -148,7 +148,13 @@ export default function FrontOrders() {
                                 <p className="text-sm text-zinc-500">Etat</p>
                                 <p className="text-sm font-semibold text-zinc-800">{stateName}</p>
                             </div>
-                            <div>
+                            <div className={"space-x-2"}>
+                                <Link
+                                    to={`/orders/${getScalarValue(order?.id)}`}
+                                    className={"p-2 bg-blue-500 rounded"}
+                                >
+                                    Detail
+                                </Link>
                                 <button
                                     onClick={(e) => openModal(e, order)}
                                     className={"p-2 bg-green-500 rounded"}

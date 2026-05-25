@@ -76,7 +76,9 @@ function FrontSelectUser(props) {
                                 <option value={ANONYM_CUSTOMER_EMAIL}>Anonyme</option>
                                 {customers.map((c) =>
                                     <option key={getScalarValue(c?.id)}
-                                            value={getScalarValue(c?.email)}>{getScalarValue(c?.email)}</option>
+                                            value={getScalarValue(c?.email)}>
+                                        {getScalarValue(c?.lastname)}--{getScalarValue(c?.firstname)}--{getScalarValue(c?.email)}
+                                    </option>
                                 )}
 
                             </select>

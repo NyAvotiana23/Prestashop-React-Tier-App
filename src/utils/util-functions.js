@@ -162,9 +162,10 @@ export function parseAchat(value) {
  * Accepts the same options as parseCsvNumber.
  */
 export function parseFlexibleNumber(value) {
-    value.trim();
-    const replaced = value.replace(",", ".").replace("%", "");
-    return parseFloat(replaced);
+    if (value === null || value === undefined) return NaN;
+    const normalized = String(value).trim().replace(",", ".").replace("%", "");
+    if (normalized === "") return NaN;
+    return parseFloat(normalized);
 }
 
 

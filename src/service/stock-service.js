@@ -4,11 +4,12 @@ import {ensureArray, getLanguageText, getScalarValue} from "../utils/util-functi
 import {buildProductIdsFilterFromOrderRows, getOrderById, getOrderRows} from "./order-service.js";
 
 
-function normalizeStockAvailables(data) {
-    return data?.stock_availables?.stock_available ?? [];
+
+export function normalizeStockAvailables(data) {
+    return ensureArray(data?.stock_availables?.stock_available ?? data?.stock_availables ?? []);
 }
 
-function normalizeStockMovements(data) {
+export function normalizeStockMovements(data) {
     if (!data || typeof data !== "object") return [];
     const node =
         data?.stock_movements?.stock_movement ??
@@ -69,7 +70,7 @@ export async function checkStockFromOrderItems(orderRows, multiplication = 1) {
         const productAttribute = getScalarValue(row?.product_attribute_id ?? row?.id_product_attribute ?? "0");
         const quantity = parseFloat(getScalarValue(row?.product_quantity ?? row?.quantity)) * Number(multiplication);
 
-        const stock = stockAvailable[String(productId)][String(productAttribute)];
+        const stock = stockAvailable?.[String(productId)]?.[String(productAttribute)] ?? 0;
 
         if (stock < quantity) return false;
     }

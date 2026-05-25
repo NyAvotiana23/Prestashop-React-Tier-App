@@ -213,9 +213,10 @@ function ensureNoDuplicateAchat (achats) {
     const  result = [];
     const treated = new Set();
     for (const achat of achats) {
-        if (!treated.has(achat.reference)) {
+        const key = `${achat.reference}::${achat.variant ?? ""}`;
+        if (!treated.has(key)) {
             result.push(combineDuplicate(achat, achats));
-            treated.add(achat.reference);
+            treated.add(key);
         }
     }
     return result;
@@ -243,6 +244,7 @@ export async function processOrderRow(row) {
     if (!achats.length) {
         return {status: "skipped", reason: "Achat vide ou illisible", details: {achat: row?.achat}};
     }
+
     achats = ensureNoDuplicateAchat(achats);
 
     // Build order items — reuse tax rate cache locally across achats in one row

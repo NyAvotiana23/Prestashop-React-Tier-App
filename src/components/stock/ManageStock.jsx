@@ -136,6 +136,53 @@ function ManageStock() {
                     Actualiser
                 </button>
             </div>
+            <div className="bg-white rounded-2xl shadow p-6">
+                <div className="flex items-center justify-between mb-5">
+                    <h2 className="text-lg font-semibold text-gray-700">Stock par categorie</h2>
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                        <span>Total physique: <span className="font-semibold text-gray-700">{formatNumber(categoryTotals.physical)}</span></span>
+                        <span>Reserve: <span className="font-semibold text-gray-700">{formatNumber(categoryTotals.reserved)}</span></span>
+                        <span>Disponible: <span className="font-semibold text-gray-700">{formatNumber(categoryTotals.available)}</span></span>
+                        <span className="text-gray-400">{categoryRows.length} categorie(s)</span>
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                        <thead>
+                        <tr className="border-b border-gray-200">
+                            {["Categorie", "Articles", "Physique", "Reserve", "Disponible"].map((h) => (
+                                <th
+                                    key={h}
+                                    className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
+                                >
+                                    {h}
+                                </th>
+                            ))}
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {categoryRows.length === 0 ? (
+                            <tr>
+                                <td colSpan={5} className="text-center py-12 text-gray-400 text-sm">
+                                    Aucun resultat
+                                </td>
+                            </tr>
+                        ) : (
+                            categoryRows.map((row) => (
+                                <tr key={row.categoryId || row.categoryName} className="border-b border-gray-100 hover:bg-gray-50">
+                                    <td className="px-4 py-3 text-gray-700 text-sm font-medium">{row.categoryName}</td>
+                                    <td className="px-4 py-3 text-gray-500 text-sm">{formatNumber(row.count)}</td>
+                                    <td className="px-4 py-3"><QuantityBadge value={row.physical}/></td>
+                                    <td className="px-4 py-3"><QuantityBadge value={row.reserved}/></td>
+                                    <td className="px-4 py-3"><QuantityBadge value={row.available}/></td>
+                                </tr>
+                            ))
+                        )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
             <div className="bg-white rounded-2xl shadow p-6">
                 <div className="flex flex-wrap items-center gap-3 mb-5">
@@ -206,53 +253,7 @@ function ManageStock() {
                 )}
             </div>
 
-            <div className="bg-white rounded-2xl shadow p-6">
-                <div className="flex items-center justify-between mb-5">
-                    <h2 className="text-lg font-semibold text-gray-700">Stock par categorie</h2>
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
-                        <span>Total physique: <span className="font-semibold text-gray-700">{formatNumber(categoryTotals.physical)}</span></span>
-                        <span>Reserve: <span className="font-semibold text-gray-700">{formatNumber(categoryTotals.reserved)}</span></span>
-                        <span>Disponible: <span className="font-semibold text-gray-700">{formatNumber(categoryTotals.available)}</span></span>
-                        <span className="text-gray-400">{categoryRows.length} categorie(s)</span>
-                    </div>
-                </div>
 
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                        <thead>
-                        <tr className="border-b border-gray-200">
-                            {["Categorie", "Articles", "Physique", "Reserve", "Disponible"].map((h) => (
-                                <th
-                                    key={h}
-                                    className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
-                                >
-                                    {h}
-                                </th>
-                            ))}
-                        </tr>
-                        </thead>
-                        <tbody>
-                        {categoryRows.length === 0 ? (
-                            <tr>
-                                <td colSpan={5} className="text-center py-12 text-gray-400 text-sm">
-                                    Aucun resultat
-                                </td>
-                            </tr>
-                        ) : (
-                            categoryRows.map((row) => (
-                                <tr key={row.categoryId || row.categoryName} className="border-b border-gray-100 hover:bg-gray-50">
-                                    <td className="px-4 py-3 text-gray-700 text-sm font-medium">{row.categoryName}</td>
-                                    <td className="px-4 py-3 text-gray-500 text-sm">{formatNumber(row.count)}</td>
-                                    <td className="px-4 py-3"><QuantityBadge value={row.physical}/></td>
-                                    <td className="px-4 py-3"><QuantityBadge value={row.reserved}/></td>
-                                    <td className="px-4 py-3"><QuantityBadge value={row.available}/></td>
-                                </tr>
-                            ))
-                        )}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
         </div>
     );
 }

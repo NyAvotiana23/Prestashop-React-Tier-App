@@ -15,8 +15,13 @@ export default function Products() {
 
     async function handleDeleteProduct(e, productId) {
         if (!window.confirm(`Delete product : ${productId}`)) return;
-        await deleteProductById(productId);
-        setDeletedId(productId);
+        try {
+            await deleteProductById(productId);
+            setDeletedId(productId);
+        } catch (err) {
+            setError(err);
+            setStatus("error");
+        }
 
     }
 

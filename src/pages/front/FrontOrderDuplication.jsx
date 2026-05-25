@@ -25,10 +25,15 @@ function FrontOrderDuplication(props) {
 
     const {customerUser} = useCustomerUser();
 
+    const normalizedDuplicateNumber = Number.parseFloat(duplicateNumber);
+    const effectiveDuplicateNumber = Number.isFinite(normalizedDuplicateNumber) && normalizedDuplicateNumber > 0
+        ? normalizedDuplicateNumber
+        : 1;
+
     async function handleValiderDuplication() {
         setLoading(true);
         try {
-            const orderCreated = await duplicateOrder(orderId, duplicateNumber, LIVRE_STATE_ID, true);
+            const orderCreated = await duplicateOrder(orderId, effectiveDuplicateNumber, LIVRE_STATE_ID, true);
             alert(`Order ${orderId}  duplicated successfully new id: ${orderCreated} and history to livré`);
         } catch (error) {
             console.log("Error : " + error.message);
@@ -47,6 +52,7 @@ function FrontOrderDuplication(props) {
 
             setLoading(true);
             setError(null);
+            setIsValid(true);
             try {
                 const orderData = await getOrderById(orderId);
 
@@ -66,10 +72,10 @@ function FrontOrderDuplication(props) {
 
                 for (const row of orderRows) {
                     const productId = getScalarValue(row?.product_id);
-                    const quantiteFinale = parseFloat(row?.product_quantity) * parseFloat(duplicateNumber);
-                    const combinationId = getScalarValue(row?.product_attribute_id);
+                    const quantiteFinale = parseFloat(row?.product_quantity) * effectiveDuplicateNumber;
+                    const combinationId = getScalarValue(row?.product_attribute_id) || "0";
 
-                    const stock = stockAvailablesByProduct[String(productId)][String(combinationId)];
+                    const stock = stockAvailablesByProduct?.[String(productId)]?.[String(combinationId)] ?? 0;
 
                     const isAvailable = quantiteFinale <= parseFloat(stock);
                     if (!isAvailable) {
@@ -87,7 +93,7 @@ function FrontOrderDuplication(props) {
         }
 
         loadData();
-    }, []);
+    }, [orderId, effectiveDuplicateNumber]);
 
 
     if (loading) {
@@ -106,10 +112,10 @@ function FrontOrderDuplication(props) {
                     <h3>Detail : </h3>
                     {ensureArray(order?.associations?.order_rows?.order_row).map((row, i) => {
                         const productId = getScalarValue(row?.product_id);
-                        const quantiteFinale = parseFloat(row?.product_quantity) * parseFloat(duplicateNumber);
-                        const combinationId = getScalarValue(row?.product_attribute_id);
+                        const quantiteFinale = parseFloat(row?.product_quantity) * effectiveDuplicateNumber;
+                        const combinationId = getScalarValue(row?.product_attribute_id) || "0";
 
-                        const stock = stockAvailables[String(productId)][String(combinationId)];
+                        const stock = stockAvailables?.[String(productId)]?.[String(combinationId)] ?? 0;
 
                         const isAvailable = quantiteFinale <= parseFloat(stock);
 

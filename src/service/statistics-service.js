@@ -1,33 +1,11 @@
 import {getList} from "../api/prestashopCrud.js";
 import {ensureArray, getLanguageText, getScalarValue} from "../utils/util-functions.js";
+import {getOrderRows, normalizeOrders} from "./order-service.js";
+import {normalizeProducts} from "./product-service.js";
+import {normalizeCategories} from "./category-service.js";
+import {normalizeStockMovements} from "./stock-service.js";
 
 const DEFAULT_SALES_STATE_IDS = new Set(["2", "5", "11"]);
-
-function normalizeOrders(data) {
-    if (!data || typeof data !== "object") return [];
-    const ordersNode = data?.orders?.order ?? data?.orders ?? data?.order ?? [];
-    return ensureArray(ordersNode);
-}
-
-function normalizeStockMovements(data) {
-    if (!data || typeof data !== "object") return [];
-    const node =
-        data?.stock_mvts?.stock_mvt ??
-        [];
-    return ensureArray(node);
-}
-
-function normalizeProducts(data) {
-    if (!data || typeof data !== "object") return [];
-    const node = data?.products?.product ?? data?.products ?? data?.product ?? [];
-    return ensureArray(node);
-}
-
-function normalizeCategories(data) {
-    if (!data || typeof data !== "object") return [];
-    const node = data?.categories?.category ?? data?.categories ?? data?.category ?? [];
-    return ensureArray(node);
-}
 
 function toFloat(value) {
     const n = Number.parseFloat(getScalarValue(value) ?? "");
@@ -39,12 +17,6 @@ function toInt(value, fallback = 0) {
     return Number.isFinite(n) ? n : fallback;
 }
 
-function getOrderRows(order) {
-    const rows = order?.associations?.order_rows?.order_row
-        ?? order?.associations?.order_rows
-        ?? [];
-    return ensureArray(rows);
-}
 
 function getRowProductId(row) {
     return getScalarValue(row?.product_id) || getScalarValue(row?.id_product) || "";
@@ -183,6 +155,7 @@ function buildProductStats({orders, movements, products, categories, validStateI
                 productName,
                 categoryId: String(categoryId),
                 categoryName,
+                quantity: 0,
                 salesHt: 0,
                 achatLocalHt: 0,
                 achatGlobalHt: 0,
@@ -207,6 +180,7 @@ function buildProductStats({orders, movements, products, categories, validStateI
             const wholesalePrice = getRowWholesalePrice(row, product);
             const localAchatLine = wholesalePrice * quantity;
 
+            stats.quantity += quantity;
             stats.salesHt += salesLine;
             stats.achatLocalHt += localAchatLine;
 
@@ -241,6 +215,7 @@ function buildProductStats({orders, movements, products, categories, validStateI
                 categoryId: key,
                 categoryName: stats.categoryName || "Inconnu",
                 salesHt: 0,
+                quantity: 0,
                 achatLocalHt: 0,
                 achatGlobalHt: 0,
                 beneficeLocalHt: 0,
@@ -249,6 +224,7 @@ function buildProductStats({orders, movements, products, categories, validStateI
         }
 
         const agg = categoryStats.get(key);
+        agg.quantity += stats.quantity;
         agg.salesHt += stats.salesHt;
         agg.achatLocalHt += stats.achatLocalHt;
         agg.achatGlobalHt += stats.achatGlobalHt;
@@ -269,6 +245,23 @@ function buildProductStats({orders, movements, products, categories, validStateI
     return {productRows, categoryRows};
 }
 
+function sumProductStats (productStatsRows)  {
+    let initToal = {
+        totalQuantity: 0,
+        totalSalesHt: 0,
+        totalPurchaseHt: 0,
+        totalBeneficeHt: 0
+    }
+
+    return productStatsRows.reduce((acc, row) => {
+        acc.totalQuantity += row.quantity;
+        acc.totalSalesHt += row.salesHt;
+        acc.totalPurchaseHt += row.achatLocalHt;
+        acc.totalBeneficeHt += row.beneficeLocalHt;
+
+        return acc;
+    }, initToal);
+}
 export async function fetchStatistics({signal, validStateIds} = {}) {
     const [ordersRes, stockRes, productsRes, categoriesRes] = await Promise.all([
         getList("orders", {display: "full", sort: "[id_ASC]", signal}),
@@ -306,6 +299,7 @@ export async function fetchStatistics({signal, validStateIds} = {}) {
     const profitGlobal = sales.total_products_tax_excl - purchases.total_achat;
     const profitLocal = sales.total_products_tax_excl - purchasesLocal.total_achat;
 
+    const total = sumProductStats(productRows);
     return {
         sales,
         purchases,
@@ -314,6 +308,7 @@ export async function fetchStatistics({signal, validStateIds} = {}) {
         profitLocal,
         productRows,
         categoryRows,
+        total
     };
 }
 

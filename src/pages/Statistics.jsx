@@ -26,6 +26,12 @@ const EMPTY_STATS = {
     profitLocal: 0,
     productRows: [],
     categoryRows: [],
+    total: {
+        totalQuantity: 0,
+        totalSalesHt: 0,
+        totalPurchaseHt: 0,
+        totalBeneficeHt: 0
+    }
 };
 
 function StatCard({label, value, helper, css}) {
@@ -48,6 +54,7 @@ function Statistics() {
             setStatus("loading");
             setError(null);
             const result = await fetchStatistics({signal});
+            console.log(result.categoryRows);
             setStats(result);
             setStatus("success");
         } catch (err) {
@@ -140,6 +147,65 @@ function Statistics() {
                     />
                 </div>
             </section>
+            <section className="space-y-3">
+                <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400">Total Quantité vendue</h2>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <StatCard
+                        label="Quantité totale"
+                        value={stats.total.totalQuantity}
+                        css={`bg-green-200`}
+                    />
+                    <StatCard
+                        label="Total vente HT"
+                        value={formatMoney(stats.total.totalSalesHt)}
+                        css={`bg-red-200`}
+                    />
+                    <StatCard
+                        label="Total Achat Locale HT"
+                        value={formatMoney(stats.total.totalPurchaseHt)}
+                        css={`bg-red-200`}
+                    />
+                    <StatCard
+                        label="Total Benefice HT"
+                        value={formatMoney(stats.total.totalBeneficeHt)}
+                        css={`bg-red-200`}
+                    />
+                </div>
+            </section>
+
+            <section className="space-y-3">
+                <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400">
+                    Statistiques par Categorie
+                </h2>
+                {stats.categoryRows.length === 0 ? (
+                    <p className="text-sm text-gray-500">Aucune donnée produit disponible.</p>
+                ) : (
+                    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+                        <table className="min-w-full divide-y divide-gray-200 text-sm">
+                            <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                            <tr>
+                                <th className="px-4 py-3 text-left">Catégorie</th>
+                                <th className="px-4 py-3 text-left">Quantité</th>
+                                <th className="px-4 py-3 text-left">Vente Ht</th>
+                                <th className="px-4 py-3 text-right">Achat Local Ht </th>
+                                <th className="px-4 py-3 text-right">Bénéfice Local Ht</th>
+                            </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                            {stats.categoryRows.map((row) => (
+                                <tr key={row.productId}>
+                                    <td className="px-4 py-3 text-gray-700">{row.categoryName}</td>
+                                    <td className="px-4 py-3 text-gray-700">{row.quantity}</td>
+                                    <td className="px-4 py-3 text-right">{formatMoney(row.salesHt)}</td>
+                                    <td className="px-4 py-3 text-right">{formatMoney(row.achatLocalHt)}</td>
+                                    <td className="px-4 py-3 text-right">{formatMoney(row.beneficeLocalHt)}</td>
+                                </tr>
+                            ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </section>
 
             <section className="space-y-3">
                 <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400">
@@ -154,6 +220,7 @@ function Statistics() {
                                 <tr>
                                     <th className="px-4 py-3 text-left">Catégorie</th>
                                     <th className="px-4 py-3 text-left">Produit</th>
+                                    <th className="px-4 py-3 text-left">Qauntité</th>
                                     <th className="px-4 py-3 text-right">Vente HT</th>
                                     <th className="px-4 py-3 text-right">Achat HT local</th>
                                     <th className="px-4 py-3 text-right">Bénéfice HT local</th>
@@ -164,6 +231,7 @@ function Statistics() {
                                     <tr key={row.productId}>
                                         <td className="px-4 py-3 text-gray-700">{row.categoryName}</td>
                                         <td className="px-4 py-3 text-gray-900">{row.productName}</td>
+                                        <td className="px-4 py-3 text-gray-900">{row.quantity}</td>
                                         <td className="px-4 py-3 text-right">{formatMoney(row.salesHt)}</td>
                                         <td className="px-4 py-3 text-right">{formatMoney(row.achatLocalHt)}</td>
                                         <td className="px-4 py-3 text-right">{formatMoney(row.beneficeLocalHt)}</td>
