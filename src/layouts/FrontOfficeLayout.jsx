@@ -40,6 +40,9 @@ export default function FrontOfficeLayout() {
                         <Link className="text-zinc-700 hover:text-zinc-900" to="/cart">
                             Panier ({items.length})
                         </Link>
+                        <Link className="text-zinc-700 hover:text-zinc-900" to="/remote_stock">
+                            Remote Stock
+                        </Link>
                         {customerUser ? (
                             <>
                                 <Link className="text-zinc-700 hover:text-zinc-900" to="/orders">

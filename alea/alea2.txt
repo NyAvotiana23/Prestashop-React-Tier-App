@@ -1,0 +1,13 @@
+Front office :
+Stock : RemoteStock => nouvelle page =>
+    formulaire :
+        nombre :
+        categorie : liste déroulate
+
+        boutton valider
+
+        => Mihena nombre daoly ny stock na produit izay categorie categorie => min 0
+
+        Rapport =>
+        Total (nombre  * nombre produit) | Réalisé (tena voala ilay nangatahina => possible lay niala 7 => ilay soome ny niala )
+        Protéger

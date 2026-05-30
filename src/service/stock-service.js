@@ -1,12 +1,110 @@
-import {getList, patchResource} from "../api/prestashopCrud.js";
+import {getById, getList, patchResource} from "../api/prestashopCrud.js";
 import {createStockMvt} from "../csv/mappings/csvMappingUtils.js";
 import {ensureArray, getLanguageText, getScalarValue} from "../utils/util-functions.js";
 import {buildProductIdsFilterFromOrderRows, getOrderById, getOrderRows} from "./order-service.js";
 
 
-
 export function normalizeStockAvailables(data) {
     return ensureArray(data?.stock_availables?.stock_available ?? data?.stock_availables ?? []);
+}
+
+export async function patchStockAvailableForCategorieId(nombre, categorieId) {
+    const nombreFloat = Number(nombre);
+
+    const productsResult = await getList("products", {
+        display: "full",
+        filters: {
+            id_category_default: categorieId
+        }
+    });
+
+    const products = normalizeProducts(productsResult?.data);
+
+    const rapport = {
+        total: 0,
+        realise: 0,
+    }
+    for (const product of products) {
+        const productId = getScalarValue(product?.id);
+        const res = await patchStockAvailabaleForProductId(nombreFloat, productId);
+        rapport.total += res.total;
+        rapport.realise += res.realise;
+
+    }
+
+    return rapport;
+}
+
+export async function patchStockAvailabaleForProductId(nombreDecrease, productId) {
+    const stockAvailableRes = await getList("stock_availables", {
+        display: "full",
+        filters: {
+            id_product: productId
+        }
+    });
+
+    const stockAvailables = normalizeStockAvailables(stockAvailableRes?.data);
+
+    const res = {
+        total: 0,
+        realise: 0,
+    }
+
+    const productHasCombinations = stockAvailables.length > 1;
+
+    console.log("Product has combinations : " + productHasCombinations);
+
+    // 52
+    // 31
+    for (const stockAvailable of stockAvailables) {
+        const productStockId = getScalarValue(stockAvailable?.id_product);
+        const productAttributeId = getScalarValue(stockAvailable?.id_product_attribute);
+
+        console.log("Product attribute id : " + productAttributeId)
+        if (productHasCombinations) {
+            if (productAttributeId === 0) {
+                console.log("Continuer ! ");
+                continue;
+            }
+        }
+
+        const stockAvailableId = getScalarValue(stockAvailable?.id);
+
+
+        const stock = Number(getScalarValue(stockAvailable?.quantity));
+
+        const quantityRealise = Math.max(0, stock - nombreDecrease);
+
+        let theorique = Math.min(stock, nombreDecrease);
+        let newVal = stock - theorique;
+
+
+        await patchResource("stock_availables", stockAvailableId, {
+            stock_availables: {
+                id: stockAvailableId,
+                quantity: newVal
+            }
+        });
+
+        console.log("Stock : " + stock);
+        console.log("Quantite new val : " + newVal + " Quantite realise : " + quantityRealise);
+        console.log("Nanalana : " + theorique);
+
+
+        res.total += nombreDecrease;
+        res.realise += theorique;
+
+
+    }
+
+
+    return res;
+}
+
+export async function getStockAvailableById(id) {
+    const response = await getById("stock_availables", id);
+    return response?.data?.stock_available ?? null;
+
 }
 
 export function normalizeStockMovements(data) {
@@ -54,7 +152,7 @@ export async function getStockByProductIds(productIds) {
     return productStock;
 }
 
-export async function checkStockFromOrderId(orderId,  multiplication = 1) {
+export async function checkStockFromOrderId(orderId, multiplication = 1) {
     const order = await getOrderById(orderId);
     const orderRows = getOrderRows(order)
     return checkStockFromOrderItems(orderRows, multiplication);

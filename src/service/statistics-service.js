@@ -3,7 +3,7 @@ import {ensureArray, getLanguageText, getScalarValue} from "../utils/util-functi
 import {getOrderRows, normalizeOrders} from "./order-service.js";
 import {normalizeProducts} from "./product-service.js";
 import {normalizeCategories} from "./category-service.js";
-import {normalizeStockMovements} from "./stock-service.js";
+import {getStockAvailableById, getStockByProductIds, normalizeStockMovements} from "./stock-service.js";
 
 const DEFAULT_SALES_STATE_IDS = new Set(["2", "5", "11"]);
 
@@ -131,7 +131,14 @@ function buildLocalPurchaseStats(orders, productsById, validStateIds = DEFAULT_S
     };
 }
 
-function buildProductStats({orders, movements, products, categories, validStateIds}) {
+export async function getProductIdFromStockMovement (stockMovement) {
+    const stockId = getScalarValue(stockMovement?.id_stock);
+    if (!stockId) return "";
+    const stock = await getStockAvailableById(stockId);
+    return getScalarValue(stock?.id_product);
+}
+
+async function buildProductStats({orders, movements, products, categories, validStateIds}) {
     const productsById = Object.fromEntries(
         products.map((product) => [String(getScalarValue(product?.id)), product])
     );
@@ -190,24 +197,43 @@ function buildProductStats({orders, movements, products, categories, validStateI
         });
     });
 
-    movements.forEach((mvt) => {
+    const stockProductCache = new Map();
+
+    async function resolveProductIdFromMovement(mvt) {
+        const stockId = String(getScalarValue(mvt?.id_stock) ?? "");
+        if (!stockId) return "";
+        if (stockProductCache.has(stockId)) return stockProductCache.get(stockId);
+        const productId = await getProductIdFromStockMovement(mvt);
+        const normalized = String(getScalarValue(productId) ?? "");
+        stockProductCache.set(stockId, normalized);
+        return normalized;
+    }
+
+    for (const mvt of movements) {
         const idOrder = String(getScalarValue(mvt?.id_order) ?? "0");
         const sign = Number(getScalarValue(mvt?.sign) ?? 0);
-        if (idOrder !== "0" || sign !== 1) return;
+        if (idOrder !== "0" || sign !== 1) continue;
 
-        const productId = getScalarValue(mvt?.id_product);
-        if (!productId) return;
+        const productId = await resolveProductIdFromMovement(mvt);
+        if (!productId) continue;
         const stats = ensureProductStat(productId);
 
         const quantity = toFloat(mvt?.physical_quantity);
         const priceTe = toFloat(mvt?.price_te);
         stats.achatGlobalHt += quantity * priceTe;
-    });
+    }
 
     const categoryStats = new Map();
     productStats.forEach((stats) => {
-        stats.beneficeLocalHt = stats.salesHt - stats.achatLocalHt;
-        stats.beneficeGlobalHt = stats.salesHt - stats.achatGlobalHt;
+        const salesHt = toFloat(stats.salesHt);
+        const achatLocalHt = toFloat(stats.achatLocalHt);
+        const achatGlobalHt = toFloat(stats.achatGlobalHt);
+
+        stats.salesHt = salesHt;
+        stats.achatLocalHt = achatLocalHt;
+        stats.achatGlobalHt = achatGlobalHt;
+        stats.beneficeLocalHt = salesHt - achatLocalHt;
+        stats.beneficeGlobalHt = salesHt - achatGlobalHt;
 
         const key = stats.categoryId || "0";
         if (!categoryStats.has(key)) {
@@ -225,9 +251,9 @@ function buildProductStats({orders, movements, products, categories, validStateI
 
         const agg = categoryStats.get(key);
         agg.quantity += stats.quantity;
-        agg.salesHt += stats.salesHt;
-        agg.achatLocalHt += stats.achatLocalHt;
-        agg.achatGlobalHt += stats.achatGlobalHt;
+        agg.salesHt += salesHt;
+        agg.achatLocalHt += achatLocalHt;
+        agg.achatGlobalHt += achatGlobalHt;
         agg.beneficeLocalHt += stats.beneficeLocalHt;
         agg.beneficeGlobalHt += stats.beneficeGlobalHt;
     });
@@ -242,7 +268,24 @@ function buildProductStats({orders, movements, products, categories, validStateI
         a.categoryName.localeCompare(b.categoryName)
     );
 
-    return {productRows, categoryRows};
+    function normalizeStatRow(row) {
+        const salesHt = toFloat(row?.salesHt);
+        const achatLocalHt = toFloat(row?.achatLocalHt);
+        const achatGlobalHt = toFloat(row?.achatGlobalHt);
+        return {
+            ...row,
+            salesHt,
+            achatLocalHt,
+            achatGlobalHt,
+            beneficeLocalHt: salesHt - achatLocalHt,
+            beneficeGlobalHt: salesHt - achatGlobalHt,
+        };
+    }
+
+    const normalizedProductRows = productRows.map(normalizeStatRow);
+    const normalizedCategoryRows = categoryRows.map(normalizeStatRow);
+
+    return {productRows: normalizedProductRows, categoryRows: normalizedCategoryRows};
 }
 
 function sumProductStats (productStatsRows)  {
@@ -288,7 +331,7 @@ export async function fetchStatistics({signal, validStateIds} = {}) {
         validStateIds ?? DEFAULT_SALES_STATE_IDS
     );
 
-    const {productRows, categoryRows} = buildProductStats({
+    const {productRows, categoryRows} = await buildProductStats({
         orders,
         movements,
         products,

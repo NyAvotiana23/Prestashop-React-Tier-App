@@ -26,6 +26,7 @@ import FrontCartHistory from "../pages/front/FrontCartHistory.jsx";
 import StockAvailable from "../components/stock/StockAvailable.jsx";
 import Statistics from "../pages/Statistics.jsx";
 import FrontOrderDuplication from "../pages/front/FrontOrderDuplication.jsx";
+import RemoteStock from "../pages/front/RemoteStock.jsx";
 
 export const router = createBrowserRouter([
     {
@@ -46,6 +47,7 @@ export const router = createBrowserRouter([
                     {path: "reset-database", element: <ResetDatabase/>},
                     {path: "import-database", element: <ImportDatabase/>},
                     {path: "import-database", element: <ImportDatabase/>},
+                    {path: "remote_stock", element: <RemoteStock/>},
                     catalogRoutes,
                     customerRoutes,
                     orderRoutes,
@@ -79,6 +81,12 @@ export const router = createBrowserRouter([
                     {path: "orders/duplicate/:orderId/:duplicateNumber", element: <FrontOrderDuplication/>},
                 ],
             },
+            {
+                element: <AdminUserProvider><RequireAdmin/></AdminUserProvider>,
+                children: [
+                    {path: "remote_stock", element: <RemoteStock/>},
+                ],
+            },
         ],
-    },
+    }
 ]);

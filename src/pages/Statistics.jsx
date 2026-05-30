@@ -187,18 +187,22 @@ function Statistics() {
                                 <th className="px-4 py-3 text-left">Catégorie</th>
                                 <th className="px-4 py-3 text-left">Quantité</th>
                                 <th className="px-4 py-3 text-left">Vente Ht</th>
-                                <th className="px-4 py-3 text-right">Achat Local Ht </th>
+                                <th className="px-4 py-3 text-right">Achat Local Ht</th>
+                                <th className="px-4 py-3 text-right">Achat Global Ht</th>
                                 <th className="px-4 py-3 text-right">Bénéfice Local Ht</th>
+                                <th className="px-4 py-3 text-right">Bénéfice Global Ht</th>
                             </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                             {stats.categoryRows.map((row) => (
-                                <tr key={row.productId}>
+                                <tr key={row.categoryId}>
                                     <td className="px-4 py-3 text-gray-700">{row.categoryName}</td>
                                     <td className="px-4 py-3 text-gray-700">{row.quantity}</td>
                                     <td className="px-4 py-3 text-right">{formatMoney(row.salesHt)}</td>
                                     <td className="px-4 py-3 text-right">{formatMoney(row.achatLocalHt)}</td>
+                                    <td className="px-4 py-3 text-right">{formatMoney(row.achatGlobalHt)}</td>
                                     <td className="px-4 py-3 text-right">{formatMoney(row.beneficeLocalHt)}</td>
+                                    <td className="px-4 py-3 text-right">{formatMoney(row.beneficeGlobalHt)}</td>
                                 </tr>
                             ))}
                             </tbody>
@@ -223,7 +227,9 @@ function Statistics() {
                                     <th className="px-4 py-3 text-left">Qauntité</th>
                                     <th className="px-4 py-3 text-right">Vente HT</th>
                                     <th className="px-4 py-3 text-right">Achat HT local</th>
+                                    <th className="px-4 py-3 text-right">Achat HT global</th>
                                     <th className="px-4 py-3 text-right">Bénéfice HT local</th>
+                                    <th className="px-4 py-3 text-right">Bénéfice HT global</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -234,7 +240,9 @@ function Statistics() {
                                         <td className="px-4 py-3 text-gray-900">{row.quantity}</td>
                                         <td className="px-4 py-3 text-right">{formatMoney(row.salesHt)}</td>
                                         <td className="px-4 py-3 text-right">{formatMoney(row.achatLocalHt)}</td>
+                                        <td className="px-4 py-3 text-right">{formatMoney(row.achatGlobalHt)}</td>
                                         <td className="px-4 py-3 text-right">{formatMoney(row.beneficeLocalHt)}</td>
+                                        <td className="px-4 py-3 text-right">{formatMoney(row.beneficeGlobalHt)}</td>
                                     </tr>
                                 ))}
                             </tbody>
